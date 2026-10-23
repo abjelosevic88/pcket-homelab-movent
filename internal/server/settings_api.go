@@ -93,6 +93,29 @@ func clampI(v, lo, hi int) int {
 	return v
 }
 
+// analysisVersion goes up whenever visit and journey detection changes, so
+// everyone's history is worked out again once, with the new rules, on start.
+// 2: walking loops are no visits, walk/drive splits, stays over a long
+// silence elsewhere end within 12 h.
+const analysisVersion = "2"
+
+func (s *Server) rebuildIfAnalysisChanged(ctx context.Context) {
+	if s.store.BoxValue(ctx, "analysis_version") == analysisVersion {
+		return
+	}
+	users, err := s.store.UsersWithPoints(ctx)
+	if err != nil {
+		s.log.Warn("analysis version: users", "err", err)
+		return
+	}
+	for _, id := range users {
+		s.rebuildAll(ctx, id)
+	}
+	if err := s.store.SetBoxValue(ctx, "analysis_version", analysisVersion); err == nil {
+		s.log.Info("detection changed: rebuilding history", "version", analysisVersion, "people", len(users))
+	}
+}
+
 // rebuildAll queues the person's whole history for a rebuild.
 func (s *Server) rebuildAll(ctx context.Context, userID int64) {
 	first, last, _ := s.store.PointBounds(ctx, userID)

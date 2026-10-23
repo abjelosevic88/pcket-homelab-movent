@@ -118,6 +118,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	}
 	_ = s.store.PurgeSessions(ctx)
 	_ = s.store.RequeueRunning(ctx)
+	s.rebuildIfAnalysisChanged(ctx)
 	go s.rebuildLoop(ctx)
 	go s.importLoop(ctx)
 	go s.geocodeLoop(ctx)
