@@ -137,9 +137,14 @@ type Move struct {
 // almost nothing while still, so a long silence followed by a point close by
 // also counts as staying put: the stay lasts until the next point minus the
 // time it would take to get there.
+//
+// Walking round and round a block also stays within the radius, so the ends
+// of a cluster where the phone says it is moving are trimmed off (they belong
+// to the journeys either side), and a cluster that is mostly moving is no stay.
 func Segment(pts []P, prm Params) ([]Stay, []Move) {
 	var stays []Stay
 	n := len(pts)
+	moving := movingFlags(pts)
 	i := 0
 	for i < n {
 		lat, lng := pts[i].Lat, pts[i].Lng
@@ -159,24 +164,52 @@ func Segment(pts []P, prm Params) ([]Stay, []Move) {
 			lng += (pts[j].Lng - lng) / cnt
 			j++
 		}
-		start, end := pts[i].TS, pts[j-1].TS
-		// The silence after the cluster.
-		if j < n {
+		// Trim the walking in and out; recentre on what is left.
+		a, b := i, j
+		for a < b && moving[a] {
+			a++
+		}
+		for b > a && moving[b-1] {
+			b--
+		}
+		if b <= a || movingShare(moving[a:b]) > 0.5 {
+			i++
+			continue
+		}
+		if a != i || b != j {
+			lat, lng = 0, 0
+			for k := a; k < b; k++ {
+				lat += pts[k].Lat
+				lng += pts[k].Lng
+			}
+			lat, lng = lat/float64(b-a), lng/float64(b-a)
+		}
+		start, end := pts[a].TS, pts[b-1].TS
+		// The silence after the cluster (not when the phone walked away first).
+		if j < n && b == j {
 			gap := pts[j].TS - end
 			d := geo.Haversine(lat, lng, pts[j].Lat, pts[j].Lng)
-			if gap > 10*60 && d/float64(gap) < 0.5 {
+			// Not when the phone was driving into the silence; and unless the
+			// next point is back at the spot, at most 12 h: a single point
+			// before a long gap is not a stay of months.
+			driving := pts[b-1].Speed != nil && *pts[b-1].Speed > 2
+			if gap > 10*60 && d/float64(gap) < 0.5 && !driving {
 				travel := int64(d / 5) // ~18 km/h to get to the next point
-				if e := pts[j].TS - travel; e > end {
+				e := pts[j].TS - travel
+				if d > prm.VisitRadius*2 {
+					e = min(e, end+12*3600)
+				}
+				if e > end {
 					end = e
 				}
 			}
 		}
 		if end-start >= prm.MinStay {
 			var r float64
-			for k := i; k < j; k++ {
+			for k := a; k < b; k++ {
 				r = math.Max(r, geo.Haversine(lat, lng, pts[k].Lat, pts[k].Lng))
 			}
-			stays = append(stays, Stay{Start: start, End: end, Lat: lat, Lng: lng, Radius: r, Points: j - i, first: i, last: j - 1})
+			stays = append(stays, Stay{Start: start, End: end, Lat: lat, Lng: lng, Radius: r, Points: b - a, first: a, last: b - 1})
 			i = j
 			continue
 		}
@@ -221,14 +254,184 @@ func Segment(pts []P, prm Params) ([]Stay, []Move) {
 			emit(prev, n-1)
 		}
 	}
-	// A "journey" that never left the neighbourhood is noise.
-	kept := moves[:0]
+	// A "journey" that never left the neighbourhood is noise. One that walks
+	// to the car and drives off is two journeys.
+	var kept []Move
 	for _, m := range moves {
 		if span(m.Pts) >= prm.VisitRadius*1.5 {
-			kept = append(kept, m)
+			kept = append(kept, splitModes(m)...)
 		}
 	}
 	return stays, kept
+}
+
+// Speeds (m/s) that split a journey: on foot below footMax, in a vehicle
+// from vehicleMin; in between is left to the neighbours.
+const (
+	footMax    = 2.2
+	vehicleMin = 3.5
+	modeMinRun = 60 // seconds a change has to last
+)
+
+// splitModes cuts a journey where it changes from on foot to a vehicle or
+// back (walking to the car, getting off the bus), so each part gets its own
+// mode. The parts share the point where they meet, keeping the line whole.
+func splitModes(m Move) []Move {
+	pts := m.Pts
+	n := len(pts)
+	if n < 8 {
+		return []Move{m}
+	}
+	// 0 = unknown, 1 = on foot, 2 = vehicle; a reported speed, else to the next point.
+	cls := make([]int, n)
+	for k := range pts {
+		var v float64 = -1
+		if pts[k].Speed != nil && *pts[k].Speed >= 0 {
+			v = *pts[k].Speed
+		} else if k+1 < n {
+			if dt := float64(pts[k+1].TS - pts[k].TS); dt > 0 && dt <= 120 {
+				v = geo.Haversine(pts[k].Lat, pts[k].Lng, pts[k+1].Lat, pts[k+1].Lng) / dt
+			}
+		}
+		switch {
+		case v < 0:
+		case v < footMax:
+			cls[k] = 1
+		case v >= vehicleMin:
+			cls[k] = 2
+		}
+	}
+	// Majority over a window of 7 smooths a red light or a jog.
+	sm := make([]int, n)
+	for k := range pts {
+		var f, c int
+		for o := max(0, k-3); o <= min(n-1, k+3); o++ {
+			switch cls[o] {
+			case 1:
+				f++
+			case 2:
+				c++
+			}
+		}
+		switch {
+		case c > f:
+			sm[k] = 2
+		case f > c:
+			sm[k] = 1
+		case k > 0:
+			sm[k] = sm[k-1]
+		}
+	}
+	// Runs of one kind.
+	type run struct{ a, b, kind int } // inclusive
+	var runs []run
+	for k := 0; k < n; k++ {
+		if len(runs) > 0 && (runs[len(runs)-1].kind == sm[k] || sm[k] == 0) {
+			runs[len(runs)-1].b = k
+			continue
+		}
+		runs = append(runs, run{k, k, sm[k]})
+	}
+	// Only a real walk next to a real drive is a change: on foot for two
+	// minutes at walking pace, in a vehicle for a minute with real speed.
+	// Stop-and-go traffic and red lights stay part of the drive.
+	speedsOf := func(r run) []float64 {
+		var v []float64
+		for k := r.a; k <= r.b; k++ {
+			if pts[k].Speed != nil && *pts[k].Speed >= 0 {
+				v = append(v, *pts[k].Speed)
+			}
+		}
+		sort.Float64s(v)
+		return v
+	}
+	valid := func(r run) bool {
+		dur := pts[r.b].TS - pts[r.a].TS
+		v := speedsOf(r)
+		switch r.kind {
+		case 1:
+			return dur >= 2*modeMinRun && (len(v) < 3 || (percentile(v, 0.5) <= 2.0 && percentile(v, 0.85) <= 2.6))
+		case 2:
+			return dur >= modeMinRun && (len(v) < 3 || percentile(v, 0.85) >= 6)
+		}
+		return false
+	}
+	var out []run
+	for _, r := range runs {
+		if !valid(r) {
+			r.kind = 0
+		}
+		if len(out) > 0 && (out[len(out)-1].kind == r.kind || r.kind == 0) {
+			out[len(out)-1].b = r.b
+			continue
+		}
+		if len(out) > 0 && out[len(out)-1].kind == 0 {
+			// what came before was unclear: it goes with this run
+			r.a = out[len(out)-1].a
+			out = out[:len(out)-1]
+			if len(out) > 0 && out[len(out)-1].kind == r.kind {
+				out[len(out)-1].b = r.b
+				continue
+			}
+		}
+		out = append(out, r)
+	}
+	if len(out) < 2 {
+		return []Move{m}
+	}
+	parts := make([]Move, 0, len(out))
+	for k, r := range out {
+		b := r.b
+		if k+1 < len(out) {
+			b = out[k+1].a // share the meeting point
+		}
+		parts = append(parts, Move{Pts: pts[r.a : b+1]})
+	}
+	return parts
+}
+
+// stayMoving is the speed (m/s) from which a point counts as moving: a slow
+// walk is ~1.1 m/s, while a phone lying still reports (or jitters at) well under.
+const stayMoving = 1.0
+
+// movingFlags marks the points where the phone was moving: its own speed when
+// it reports one, else the speed to a neighbour less than a minute away (sparse
+// "significant change" points never count as moving, as before).
+func movingFlags(pts []P) []bool {
+	out := make([]bool, len(pts))
+	for k, p := range pts {
+		if p.Speed != nil && *p.Speed >= 0 {
+			out[k] = *p.Speed >= stayMoving
+			continue
+		}
+		for _, o := range []int{k - 1, k + 1} {
+			if o < 0 || o >= len(pts) {
+				continue
+			}
+			dt := math.Abs(float64(pts[o].TS - p.TS))
+			if dt <= 0 || dt > 60 {
+				continue
+			}
+			d := geo.Haversine(p.Lat, p.Lng, pts[o].Lat, pts[o].Lng) - math.Max(p.Acc, pts[o].Acc)
+			if d/dt >= stayMoving*1.2 {
+				out[k] = true
+			}
+		}
+	}
+	return out
+}
+
+func movingShare(m []bool) float64 {
+	if len(m) == 0 {
+		return 0
+	}
+	n := 0
+	for _, v := range m {
+		if v {
+			n++
+		}
+	}
+	return float64(n) / float64(len(m))
 }
 
 // span is the largest distance from the first point.

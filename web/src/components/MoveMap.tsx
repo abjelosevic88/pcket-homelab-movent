@@ -113,9 +113,18 @@ export function MoveMap(props: MoveMapProps) {
     g.clearLayers(); raw.clearLayers()
     if (!layers.routes) return
     const sel = props.selected
+    // A journey leaves from the visit before it and arrives at the one after:
+    // its line runs to the visit's centre, not just to its own first and last
+    // points (those lie somewhere inside the visit's circle).
+    const visits = (props.visits || []).filter(v => v.status !== 'declined')
+    const near = (a: [number, number], v: Visit) => L.latLng(a).distanceTo([v.lat, v.lng]) <= Math.max(v.radius * 2, 300)
     for (const t of props.tracks || []) {
       const pts = decodePolyline(t.polyline)
       if (pts.length < 2) continue
+      const from = visits.find(v => Math.abs(v.end_ts - t.start_ts) <= 600 && near(pts[0], v))
+      const to = visits.find(v => Math.abs(v.start_ts - t.end_ts) <= 600 && near(pts[pts.length - 1], v))
+      if (from) pts.unshift([from.lat, from.lng])
+      if (to) pts.push([to.lat, to.lng])
       const isSel = sel?.type === 'journey' && sel.id === t.id
       const color = props.colorBy === 'mode' ? modeOf(t.mode).color : props.colorBy === 'plain' ? cssVar('--accent', '#4d7c0f') : speedColor(t.avg_speed)
       const dim = !!sel && !isSel
@@ -129,7 +138,7 @@ export function MoveMap(props: MoveMapProps) {
       const pts = decodePolyline(props.raw)
       if (pts.length > 1) L.polyline(pts, { color: '#64748b', weight: 3, opacity: .8, dashArray: '4 6', lineJoin: 'round' }).bindTooltip('Recorded, not yet sorted into journeys', { sticky: true }).addTo(raw)
     }
-  }, [props.tracks, props.raw, props.selected, props.colorBy, layers.routes])
+  }, [props.tracks, props.raw, props.visits, props.selected, props.colorBy, layers.routes])
 
   // ---- the selected journey, speed by speed ----
   useEffect(() => {

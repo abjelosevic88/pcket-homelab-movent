@@ -205,3 +205,16 @@ func (s *Store) CacheDelete(ctx context.Context, prefix string) error {
 	_, err := s.DB.ExecContext(ctx, `DELETE FROM cache WHERE key LIKE ? || '%'`, prefix)
 	return err
 }
+
+// BoxValue reads one raw box-wide value ("" when unset).
+func (s *Store) BoxValue(ctx context.Context, key string) string {
+	var v string
+	_ = s.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	return v
+}
+
+// SetBoxValue stores one raw box-wide value.
+func (s *Store) SetBoxValue(ctx context.Context, key, value string) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}
