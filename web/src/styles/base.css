@@ -276,7 +276,7 @@ input.bare, textarea.bare { border-color: transparent; background: transparent; 
 .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 550; height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); cursor: pointer; }
 .chip:hover { background: var(--surface-2); }
 .chip.active { background: var(--accent-soft); border-color: transparent; color: var(--accent-ink); }
-.badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 650; background: var(--surface-3); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.badge { display: inline-flex; flex-shrink: 0; white-space: nowrap; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 650; background: var(--surface-3); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .badge.accent { background: var(--accent); color: #fff; }
 .badge.warn { background: var(--warning-soft); color: var(--warning); }
 .badge.ok { background: var(--success-soft); color: var(--success); }
