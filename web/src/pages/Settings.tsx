@@ -10,7 +10,7 @@ import type { APIToken, Place, PrivacyZone, Settings as SettingsT, User } from '
 import { Avatar, Confirm, Field, Loading, Modal, Segmented, SettingRow, Switch, Tabs, errMsg, useAsync, useIsMobile, useToast } from '../components/ui'
 import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
-import { MoveMap, TILES } from '../components/MoveMap'
+import { MoveMap, TILES, tileKey } from '../components/MoveMap'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { AskButton } from '../components/AskButton'
 import '../styles/manage.css'
@@ -160,7 +160,7 @@ function General() {
       </Section>
       <Section title="Map">
         <SettingRow title="Map tiles" help="All free and keyless. The dark tiles suit the dark theme.">
-          <Select value={f.map_tiles} onChange={v => setF({ ...f, map_tiles: v })} options={Object.entries(TILES).map(([v, t]) => ({ value: v, label: t.label }))} />
+          <Select value={tileKey(f.map_tiles)} onChange={v => setF({ ...f, map_tiles: v })} options={Object.entries(TILES).map(([v, t]) => ({ value: v, label: t.label }))} />
         </SettingRow>
         <SettingRow title="Colour routes by" help="Speed: slow green to fast red. Mode: walking, cycling, driving… each its own colour.">
           <Segmented size="sm" value={f.route_color} onChange={v => setF({ ...f, route_color: v })} label="Route colour" options={[{ value: 'speed', label: 'Speed' }, { value: 'mode', label: 'Mode' }, { value: 'plain', label: 'Plain' }]} />
