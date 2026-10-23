@@ -39,11 +39,11 @@ function VisitRow({ v, sel, onSelect, onChanged, compact, readOnly, earlier }: {
   return (
     <li className={`tl-row visit ${v.status} ${sel ? 'sel' : ''}`} onClick={() => onSelect?.({ type: 'visit', id: v.id })} data-pocket-ask={`visit ${v.id}`}>
       <div className="tl-time">{earlier ? <span className="tl-earlier" title={`Since ${fmtClock(v.start_ts)} the day before`}>↑ {fmtClock(v.start_ts)}</span> : <span>{fmtClock(v.start_ts)}</span>}{!compact && <span className="muted">{fmtClock(v.end_ts)}</span>}</div>
-      <div className="tl-rail"><span className="tl-dot visit">{v.place ? placeEmoji(v.place.category) : '📍'}</span></div>
+      <div className="tl-rail"><span className="tl-dot visit" title={v.status === 'suggested' ? 'Suggested: confirm or decline it' : undefined}>{v.place ? placeEmoji(v.place.category) : '📍'}</span></div>
       <div className="tl-body">
         <div className="tl-title">
           <span className="ellipsis">{v.name || <span className="muted">Unnamed place{v.place?.geocoded === 0 ? ' (naming…)' : ''}</span>}</span>
-          {v.status === 'suggested' && <span className="badge">suggested</span>}
+          {v.status === 'suggested' && !compact && <span className="badge">suggested</span>}
           {v.status === 'declined' && <span className="badge muted">declined</span>}
         </div>
         <div className="tl-sub">{fmtDur(dur)}{v.place?.city ? ` · ${v.place.city}` : ''}{v.place?.kind === 'saved' ? ' · saved place' : ''}{v.notes ? ` · ${v.notes}` : ''}</div>

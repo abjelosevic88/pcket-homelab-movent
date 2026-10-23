@@ -10,18 +10,25 @@ import type { Journey, LivePerson, Place, Visit } from '../lib/types'
 
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 const ESRI_ATTR = 'Tiles &copy; Esri'
-export const TILES: Record<string, { label: string; url: string; attr: string; overlay?: string; maxZoom?: number; dark?: boolean }> = {
+// All free and keyless (CARTO's basemaps now want an API key).
+export const TILES: Record<string, { label: string; url: string; attr: string; overlay?: string; maxZoom?: number; native?: number; dark?: boolean }> = {
   osm: { label: 'OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attr: OSM_ATTR },
+  'osm-de': { label: 'OSM Germany (softer colours)', url: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png', attr: OSM_ATTR },
+  'osm-fr': { label: 'OSM France (detailed)', url: 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', attr: OSM_ATTR + ', <a href="https://www.openstreetmap.fr/">OSM France</a>', maxZoom: 20 },
   hot: { label: 'OSM Humanitarian (clean, good labels)', url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', attr: OSM_ATTR + ', style <a href="https://www.hotosm.org/">HOT</a>' },
   cyclosm: { label: 'CyclOSM (paths, trails, terrain)', url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', attr: OSM_ATTR + ', <a href="https://www.cyclosm.org/">CyclOSM</a>' },
   topo: { label: 'OpenTopoMap (hiking)', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr: OSM_ATTR + ', <a href="https://opentopomap.org">OpenTopoMap</a>', maxZoom: 17 },
-  'carto-light': { label: 'Light (CARTO Positron)', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attr: OSM_ATTR + ', &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 20 },
-  'carto-voyager': { label: 'Voyager (CARTO, soft colours)', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', attr: OSM_ATTR + ', &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 20 },
-  'carto-dark': { label: 'Dark (CARTO Dark Matter)', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attr: OSM_ATTR + ', &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 20, dark: true },
+  opnv: { label: 'ÖPNVKarte (public transport)', url: 'https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png', attr: OSM_ATTR + ', <a href="https://memomaps.de/">memomaps.de</a>', maxZoom: 18 },
+  'esri-gray': { label: 'Light grey (Esri, quiet)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', attr: ESRI_ATTR, overlay: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', native: 16 },
+  'esri-dark': { label: 'Dark grey (Esri)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', attr: ESRI_ATTR, overlay: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', native: 16, dark: true },
   'esri-topo': { label: 'Esri World Topo', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', attr: ESRI_ATTR },
   'esri-streets': { label: 'Esri World Street', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', attr: ESRI_ATTR },
   'esri-satellite': { label: 'Esri Satellite (with labels)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr: ESRI_ATTR + ', Maxar, Earthstar Geographics', overlay: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', dark: true },
 }
+
+// Styles that were removed, and what replaces them.
+export const TILE_ALIASES: Record<string, string> = { 'carto-light': 'esri-gray', 'carto-voyager': 'osm-de', 'carto-dark': 'esri-dark' }
+export const tileKey = (k?: string) => (k && TILES[k] ? k : (k && TILE_ALIASES[k]) || 'osm')
 
 export type PointRow = [number, number, number, number, number | null, number | null, number | null, number]
 export interface Layers { routes: boolean; points: boolean; heat: boolean; fog: boolean; visits: boolean; places: boolean; people: boolean }
@@ -61,7 +68,7 @@ export function MoveMap(props: MoveMapProps) {
   const propsRef = useRef(props)
   propsRef.current = props
   const { settings, theme } = useApp()
-  const tiles = TILES[settings?.map_tiles || 'osm'] || TILES.osm
+  const tiles = TILES[tileKey(settings?.map_tiles)]
   const layers = { ...DEFAULT_LAYERS, ...props.layers }
 
   // ---- create once ----
@@ -73,15 +80,20 @@ export function MoveMap(props: MoveMapProps) {
     canvas.current = L.canvas({ padding: 0.3 })
     for (const g of ['fogpane', 'heat', 'places', 'raw', 'routes', 'detail', 'points', 'visits', 'people', 'me', 'hover']) groups.current[g] = L.layerGroup().addTo(m)
     // Canvas overlays for the heat map and the fog, redrawn as the map moves.
-    const mk = (z: number) => {
+    // They live in panes inside the map, above the tiles (200) and under the
+    // lines and markers (400): appended to the container they sat beneath
+    // Leaflet's map pane (z 400) and never showed.
+    const mk = (name: string, z: number) => {
+      const pane = m.createPane(name)
+      pane.style.zIndex = String(z)
+      pane.style.pointerEvents = 'none'
       const c = document.createElement('canvas')
       c.className = 'mm-overlay'
-      c.style.zIndex = String(z)
-      m.getContainer().appendChild(c)
+      pane.appendChild(c)
       return c
     }
-    heatCv.current = mk(390)
-    fogCv.current = mk(395)
+    heatCv.current = mk('mm-heat', 350)
+    fogCv.current = mk('mm-fog', 360)
     const redraw = () => { drawHeat(m, heatCv.current!, propsRef.current); drawFog(m, fogCv.current!, propsRef.current) }
     m.on('move zoom resize viewreset', redraw)
     m.on('click', e => {
@@ -101,10 +113,11 @@ export function MoveMap(props: MoveMapProps) {
     const m = map.current
     if (!m) return
     tileLayer.current.forEach(t => t.remove())
-    const base = L.tileLayer(tiles.url, { attribution: tiles.attr, maxZoom: tiles.maxZoom || 19, className: theme === 'dark' && !tiles.dark ? 'tiles-dim' : '' }).addTo(m)
+    const zoom = { maxZoom: tiles.native ? 19 : tiles.maxZoom || 19, maxNativeZoom: tiles.native || tiles.maxZoom || 19 }
+    const base = L.tileLayer(tiles.url, { attribution: tiles.attr, ...zoom, className: theme === 'dark' && !tiles.dark ? 'tiles-dim' : '' }).addTo(m)
     tileLayer.current = [base]
-    if (tiles.overlay) tileLayer.current.push(L.tileLayer(tiles.overlay, { maxZoom: tiles.maxZoom || 19 }).addTo(m))
-  }, [tiles.url, tiles.overlay, tiles.attr, tiles.maxZoom, tiles.dark, theme])
+    if (tiles.overlay) tileLayer.current.push(L.tileLayer(tiles.overlay, zoom).addTo(m))
+  }, [tiles.url, tiles.overlay, tiles.attr, tiles.maxZoom, tiles.native, tiles.dark, theme])
 
   // ---- routes ----
   useEffect(() => {
@@ -288,6 +301,8 @@ function esc(s: string) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 
 function sizeCanvas(m: L.Map, c: HTMLCanvasElement) {
   const s = m.getSize(), dpr = window.devicePixelRatio || 1
+  // The pane moves with the map; keep the canvas over the visible area.
+  L.DomUtil.setPosition(c, m.containerPointToLayerPoint([0, 0]))
   if (c.width !== s.x * dpr || c.height !== s.y * dpr) { c.width = s.x * dpr; c.height = s.y * dpr; c.style.width = s.x + 'px'; c.style.height = s.y + 'px' }
   const ctx = c.getContext('2d')!
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -373,5 +388,6 @@ export function tilePreview(key: string, lat: number, lng: number, z = 13): stri
   const x = Math.floor(((lng + 180) / 360) * n)
   const r = (lat * Math.PI) / 180
   const y = Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n)
+  if (t.native && z > t.native) z = t.native
   return t.url.replace('{s}', 'a').replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y)).replace('{r}', '')
 }

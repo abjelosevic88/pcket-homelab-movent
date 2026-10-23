@@ -6,7 +6,7 @@ import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { addDaysISO, agoTs, fmtClock, fmtDist, fmtDur, fmtLongDate, fmtShortDate, flag, modeOf, todayIn } from '../lib/geo'
 import type { DayView, LivePerson, MapData, NowView, Place } from '../lib/types'
-import { DEFAULT_LAYERS, type Layers, MoveMap, type PointRow, TILES, tilePreview } from '../components/MoveMap'
+import { DEFAULT_LAYERS, type Layers, MoveMap, type PointRow, TILES, tileKey, tilePreview } from '../components/MoveMap'
 import { EntryList } from '../components/timeline'
 import { Icon } from '../components/icons'
 import { type Anchor, Popover, Spinner, Switch, Segmented, rectOf, useIsMobile } from '../components/ui'
@@ -195,7 +195,7 @@ export default function MapPage() {
             <div className="mp-layer-h">Map style</div>
             <div className="mp-styles">
               {Object.entries(TILES).map(([k, t]) => {
-                const cur = (settings?.map_tiles || 'osm') === k
+                const cur = tileKey(settings?.map_tiles) === k
                 const at = now?.point || boot?.home || { lat: 48.2, lng: 16.37 }
                 return (
                   <button key={k} type="button" className={`mp-style ${cur ? 'on' : ''}`} aria-pressed={cur} title={t.label} onClick={() => pickTiles(k)}>
