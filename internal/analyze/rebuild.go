@@ -350,6 +350,15 @@ func (e *Engine) Summarize(ctx context.Context, userID, from, to int64, loc *tim
 			if dt := p.TS - prev.TS; dt > 0 && dt < 30*60 {
 				a.day.MovingS += dt
 			}
+		} else if prev != nil {
+			// Sparse history (a few points a day, as in old imports) has no
+			// journeys between its points; a clear move between two of them
+			// still counts, as the straight line — a lower bound.
+			d := geo.Haversine(prev.Lat, prev.Lng, p.Lat, p.Lng)
+			if dt := p.TS - prev.TS; d > 300 && dt > 0 && dt < 12*3600 {
+				a.day.Distance += d
+				a.day.Modes["unknown"] += d
+			}
 		}
 		prev, prevTrack = p, tk
 	}
