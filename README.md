@@ -28,7 +28,7 @@
 
 **Moves in and out freely**
 - Import **Google Takeout** (Records.json, Semantic Location History — place visits keep their names), the phone's **Timeline export** (Android and iOS), **GPX**, **KML**, **GeoJSON** (Dawarich exports too), **OwnTracks .rec**, **CSV**, or a **ZIP** of any of them. Everything streams: a multi-gigabyte Takeout is fine.
-- **Move over from Dawarich** in one step: give its address and API key and areas, confirmed visits and every point come across through its API.
+- **Move over from Dawarich** in one step: give its address and API key and areas, confirmed visits and every point come across through its API. Leave it **linked** and new points keep coming over every few minutes, so a phone can go on reporting to Dawarich while you switch.
 - Export GeoJSON, GPX or CSV.
 
 **A Dawarich drop-in**

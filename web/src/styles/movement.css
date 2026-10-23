@@ -46,12 +46,17 @@ html[data-theme="dark"] .mm .leaflet-tooltip { background: var(--raised); color:
 .mm-me-mini { width: 10px; height: 10px; border-radius: 50%; background: #2563eb; border: 2px solid #fff; box-shadow: 0 0 0 3px rgba(37, 99, 235, .25); flex: none; }
 
 /* ---------- map page ---------- */
-.mp { position: relative; height: 100%; }
-.mp-map { position: absolute; inset: 0; }
+/* Every map keeps Leaflet's panes (z 400) and controls (z 1000) to itself,
+   so the drawer, popovers and dialogs always cover it. */
+.leaflet-container { isolation: isolate; }
+/* isolate: Leaflet's panes (z 400) and controls (z 1000) and the floating
+   cards stay inside the page, under the drawer, popovers and dialogs. */
+.mp { position: relative; height: 100%; isolation: isolate; }
+.mp-map { position: absolute; inset: 0; z-index: 0; }
 .card-float { background: var(--raised); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
-.mp-top { position: absolute; z-index: 500; top: 12px; left: 12px; right: 12px; display: flex; gap: 8px; align-items: center; pointer-events: none; }
+.mp-top { position: absolute; z-index: 10; top: 12px; left: 12px; right: 12px; display: flex; gap: 8px; align-items: center; pointer-events: none; }
 .mp-top > * { pointer-events: auto; }
-.mp-presets { position: absolute; z-index: 500; top: 62px; left: 12px; pointer-events: auto; }
+.mp-presets { position: absolute; z-index: 10; top: 62px; left: 12px; pointer-events: auto; }
 .mp-range { display: flex; align-items: center; height: 40px; padding: 0 2px; min-width: 0; }
 .mp-range-label { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 0 8px; font-weight: 650; font-size: 14.5px; letter-spacing: -.01em; cursor: pointer; min-width: 0; max-width: 46vw; font-variant-numeric: tabular-nums; }
 .mp-range-label input[type="date"], .tlp-date input[type="date"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
@@ -66,8 +71,17 @@ html[data-theme="dark"] .mm .leaflet-tooltip { background: var(--raised); color:
 .speed-legend { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); padding: 6px 8px 2px; }
 .speed-legend i { flex: 1; height: 6px; border-radius: 3px; background: linear-gradient(90deg, rgb(22,163,74), rgb(101,163,13), rgb(202,138,4), rgb(234,88,12), rgb(220,38,38), rgb(124,58,237)); }
 
-.mp-panel { position: absolute; z-index: 500; top: 64px; left: 12px; max-height: calc(100% - 76px); width: 360px; display: flex; flex-direction: column; overflow: hidden; padding: 14px 14px 10px; }
-.mp-panel.sheet { top: auto; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; max-height: 46vh; border-radius: 16px; }
+.mp-panel { position: absolute; z-index: 10; top: 64px; left: 12px; max-height: calc(100% - 76px); width: 360px; display: flex; flex-direction: column; overflow: hidden; padding: 14px 14px 10px; }
+.mp-panel.sheet { top: auto; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; max-height: 62vh; border-radius: 16px; padding-top: 4px; }
+.mp-panel.sheet.closed { max-height: none; }
+.mp-panel.sheet.closed .mp-stats { cursor: pointer; }
+.mp-handle { display: flex; justify-content: center; align-items: center; width: 100%; height: 18px; margin: 0 0 6px; padding: 0; border: 0; background: none; cursor: pointer; }
+.mp-handle i { width: 38px; height: 4px; border-radius: 2px; background: var(--border-strong, var(--muted)); opacity: .55; }
+.mp-styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 2px 4px 4px; }
+.mp-style { display: flex; flex-direction: column; gap: 4px; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: none; cursor: pointer; font: inherit; font-size: 11px; color: var(--text-2); text-align: center; line-height: 1.2; }
+.mp-style img { width: 100%; aspect-ratio: 1.4; object-fit: cover; border-radius: 7px; background: var(--surface-2); display: block; }
+.mp-style:hover { border-color: var(--muted); }
+.mp-style.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: var(--text); font-weight: 600; }
 .mp-panel > * { flex-shrink: 0; }
 .mp-stats { display: flex; gap: 6px; }
 .mp-stat { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
@@ -94,7 +108,8 @@ html[data-theme="dark"] .mm .leaflet-tooltip { background: var(--raised); color:
   .mp-top { top: 8px; left: 8px; right: 8px; }
   .mp-presets { top: 56px; left: 8px; }
   .mp-range-label { max-width: 52vw; font-size: 14px; }
-  .mp .leaflet-bottom.leaflet-right { bottom: calc(46vh + 8px); }
+  .mp .leaflet-bottom { bottom: var(--sheet-h, 0px); }
+  .mp .leaflet-control-zoom { display: none; } /* pinch to zoom */
 }
 
 /* ---------- timeline rows ---------- */

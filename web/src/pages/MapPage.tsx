@@ -1,12 +1,12 @@
 // Home: the map of a day or any range, with every layer, a summary and the
 // day's timeline beside it; your position and your family's update live.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { addDaysISO, agoTs, fmtClock, fmtDist, fmtDur, fmtLongDate, fmtShortDate, flag, modeOf, todayIn } from '../lib/geo'
 import type { DayView, LivePerson, MapData, NowView, Place } from '../lib/types'
-import { DEFAULT_LAYERS, type Layers, MoveMap, type PointRow } from '../components/MoveMap'
+import { DEFAULT_LAYERS, type Layers, MoveMap, type PointRow, TILES, tilePreview } from '../components/MoveMap'
 import { EntryList } from '../components/timeline'
 import { Icon } from '../components/icons'
 import { type Anchor, Popover, Spinner, Switch, Segmented, rectOf, useIsMobile } from '../components/ui'
@@ -17,7 +17,10 @@ const LAYERS_KEY = 'pm-layers'
 function monthEnd(iso: string): string { const [y, m] = iso.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10) }
 
 export default function MapPage() {
-  const { boot, settings } = useApp()
+  const { boot, settings, setSettings } = useApp()
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const pageRef = useRef<HTMLDivElement>(null)
+  const sheetRef = useRef<HTMLElement>(null)
   const navigate = useNavigate()
   const mobile = useIsMobile()
   const [sp, setSp] = useSearchParams()
@@ -145,8 +148,23 @@ export default function MapPage() {
   const dist = single ? summary?.distance || 0 : data?.distance || 0
   const modes = Object.entries(single ? summary?.modes || {} : data?.modes || {}).filter(([, m]) => m > 50).sort((a, b) => b[1] - a[1])
 
+  // The map style is a setting, so it follows the person to every device.
+  const pickTiles = (k: string) => {
+    if (!settings || settings.map_tiles === k) return
+    setSettings({ ...settings, map_tiles: k })
+    api.put<{ settings: typeof settings }>(`${V1}/account/settings`, { ...settings, map_tiles: k }).then(r => setSettings(r.settings)).catch(() => setSettings(settings))
+  }
+  // Leaflet's corner controls sit just above the sheet, whatever its height.
+  useEffect(() => {
+    const el = sheetRef.current, page = pageRef.current
+    if (!el || !page) { page?.style.removeProperty('--sheet-h'); return }
+    const ro = new ResizeObserver(() => page.style.setProperty('--sheet-h', `${mobile ? el.offsetHeight + 8 : 0}px`))
+    ro.observe(el)
+    return () => ro.disconnect()
+  })
+
   return (
-    <div className="mp">
+    <div ref={pageRef} className="mp">
       <MoveMap className="mp-map" tracks={data?.tracks} raw={data?.raw} visits={visits} places={places} points={points} heat={heat} fogCells={fog} fogCell={120}
         people={people} me={me} layers={layers} colorBy={colorBy} selected={selected} detail={detail} onSelect={setSelected}
         fitKey={`${from}|${to}|${data ? 'd' : ''}`} bounds={data?.bounds || null} />
@@ -174,6 +192,19 @@ export default function MapPage() {
             {([['routes', 'Journeys', 'route'], ['visits', 'Visits', 'pin'], ['places', 'Saved places', 'home'], ['points', 'Every point', 'dot'], ['heat', 'Heat map', 'fire'], ['fog', 'Fog of war (all time)', 'cloud'], ['people', 'Family', 'users']] as [keyof Layers, string, string][]).map(([k, l, ic]) => (
               <label key={k} className="mp-layer"><Icon name={ic} size={16} /><span className="grow">{l}</span><Switch checked={layers[k]} onChange={v => setLayer(k, v)} size="sm" /></label>
             ))}
+            <div className="mp-layer-h">Map style</div>
+            <div className="mp-styles">
+              {Object.entries(TILES).map(([k, t]) => {
+                const cur = (settings?.map_tiles || 'osm') === k
+                const at = now?.point || boot?.home || { lat: 48.2, lng: 16.37 }
+                return (
+                  <button key={k} type="button" className={`mp-style ${cur ? 'on' : ''}`} aria-pressed={cur} title={t.label} onClick={() => pickTiles(k)}>
+                    <img src={tilePreview(k, at.lat, at.lng)} alt="" loading="lazy" />
+                    <span>{t.label.replace(/ \(.*\)$/, '')}</span>
+                  </button>
+                )
+              })}
+            </div>
             <div className="mp-layer-h">Colour journeys by</div>
             <Segmented size="sm" value={colorBy} onChange={v => { setColorBy(v); localStorage.setItem('pm-color', v) }} options={[{ value: 'speed', label: 'Speed' }, { value: 'mode', label: 'Mode' }, { value: 'plain', label: 'Plain' }]} />
             {colorBy === 'speed' && <div className="speed-legend"><span>slow</span><i /><span>fast</span></div>}
@@ -190,8 +221,9 @@ export default function MapPage() {
           </div>
         </div>
       ) : (
-        <aside className={`mp-panel card-float ${mobile ? 'sheet' : ''}`} aria-label="Summary">
-          <div className="mp-stats">
+        <aside ref={sheetRef} className={`mp-panel card-float ${mobile ? `sheet ${sheetOpen ? 'open' : 'closed'}` : ''}`} aria-label="Summary">
+          {mobile && <button type="button" className="mp-handle" aria-expanded={sheetOpen} aria-label={sheetOpen ? 'Show less' : 'Show the day'} onClick={() => setSheetOpen(o => !o)}><i /></button>}
+          <div className="mp-stats" onClick={mobile && !sheetOpen ? () => setSheetOpen(true) : undefined}>
             <div className="mp-stat"><b>{fmtDist(dist)}</b><span>travelled</span></div>
             {single ? <div className="mp-stat"><b>{summary ? fmtDur(summary.moving_s) : '–'}</b><span>on the move</span></div>
               : <div className="mp-stat"><b>{data?.tracks.length ?? '–'}</b><span>journeys</span></div>}
@@ -203,7 +235,7 @@ export default function MapPage() {
               {modes.map(([m, d]) => <span key={m} style={{ flex: d, background: modeOf(m).color }} title={`${modeOf(m).label}: ${fmtDist(d)}`} />)}
             </div>
           )}
-          {modes.length > 0 && <div className="mode-legend">{modes.slice(0, 4).map(([m, d]) => <span key={m}><i style={{ background: modeOf(m).color }} />{modeOf(m).emoji} {fmtDist(d)}</span>)}</div>}
+          {modes.length > 0 && (!mobile || sheetOpen) && <div className="mode-legend">{modes.slice(0, 4).map(([m, d]) => <span key={m}><i style={{ background: modeOf(m).color }} />{modeOf(m).emoji} {fmtDist(d)}</span>)}</div>}
           {data?.pending && <p className="muted small"><Spinner size={11} /> New points are being sorted into journeys…</p>}
           {now?.point && to >= today && (
             <button type="button" className="mp-now" onClick={() => setSelected(null)}>
@@ -212,7 +244,7 @@ export default function MapPage() {
               <span className="muted small">{agoTs(now.point.ts)}{now.point.battery != null ? ` · 🔋${now.point.battery}%` : ''}</span>
             </button>
           )}
-          {single && day ? (
+          {mobile && !sheetOpen ? null : single && day ? (
             <div className="mp-entries">
               <EntryList entries={day.entries.filter(e => e.type === 'journey' || e.status !== 'declined')} selected={selected} onSelect={setSelected} onChanged={reload} compact dayStart={day.from} />
               {!day.entries.length && !loading && <p className="muted small">No journeys or visits {from === today ? 'yet today' : 'this day'}.</p>}

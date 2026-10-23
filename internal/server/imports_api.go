@@ -110,6 +110,7 @@ func (s *Server) handleImportDawarich(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := userFrom(ctx)
 	var in struct {
+		Source string `json:"source"` // direct (default) | core
 		URL    string `json:"url"`
 		APIKey string `json:"api_key"`
 	}
@@ -117,25 +118,43 @@ func (s *Server) handleImportDawarich(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	in.URL = strings.TrimRight(strings.TrimSpace(in.URL), "/")
-	pu, err := url.Parse(in.URL)
-	if err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Host == "" || strings.TrimSpace(in.APIKey) == "" {
-		writeErr(w, http.StatusBadRequest, "the Dawarich URL (http… or https…) and an API key are required")
-		return
-	}
-	dw := &dawarichClient{base: in.URL, key: strings.TrimSpace(in.APIKey), http: &http.Client{Timeout: 2 * time.Minute}}
-	me, err := dw.me(ctx)
+	dw, me, code, err := s.pickDawarich(ctx, u.Email, in.Source, in.URL, in.APIKey)
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, "cannot use that Dawarich: "+err.Error())
+		writeErr(w, code, err.Error())
 		return
 	}
-	imp := &store.Import{UserID: u.ID, Name: "Dawarich " + pu.Host + " (" + me + ")", Format: "dawarich", SourceURL: in.URL, SourceKey: dw.key}
-	if err := s.store.CreateImport(ctx, imp); err != nil {
+	imp, err := s.queueDawarichImport(ctx, u.ID, dw, me)
+	if err != nil {
 		s.fail(w, err, "queue import")
 		return
 	}
-	s.kickImport()
 	writeJSON(w, http.StatusAccepted, imp)
+}
+
+// checkDawarich normalises a Dawarich address and checks the key against
+// it, returning the account's email (or an HTTP status and a message).
+func checkDawarich(ctx context.Context, rawURL, key string) (*dawarichClient, string, int, error) {
+	base := strings.TrimRight(strings.TrimSpace(rawURL), "/")
+	pu, err := url.Parse(base)
+	if err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Host == "" || strings.TrimSpace(key) == "" {
+		return nil, "", http.StatusBadRequest, errors.New("the Dawarich URL (http… or https…) and an API key are required")
+	}
+	dw := &dawarichClient{base: base, key: strings.TrimSpace(key), http: &http.Client{Timeout: 2 * time.Minute}}
+	me, err := dw.me(ctx)
+	if err != nil {
+		return nil, "", http.StatusBadGateway, errors.New("cannot use that Dawarich: " + err.Error())
+	}
+	return dw, me, 0, nil
+}
+
+func (s *Server) queueDawarichImport(ctx context.Context, userID int64, dw *dawarichClient, me string) (*store.Import, error) {
+	pu, _ := url.Parse(dw.base)
+	imp := &store.Import{UserID: userID, Name: "Dawarich " + pu.Host + " (" + me + ")", Format: "dawarich", SourceURL: dw.base, SourceKey: dw.key}
+	if err := s.store.CreateImport(ctx, imp); err != nil {
+		return nil, err
+	}
+	s.kickImport()
+	return imp, nil
 }
 
 func (s *Server) handleDeleteImport(w http.ResponseWriter, r *http.Request) {
@@ -450,27 +469,9 @@ func (s *Server) importFromDawarich(ctx context.Context, imp *store.Import, sink
 		}
 		pts := make([]importer.Point, 0, len(rows))
 		for _, row := range rows {
-			lat, ok1 := num(row["latitude"])
-			lng, ok2 := num(row["longitude"])
-			ts, ok3 := num(row["timestamp"])
-			if !ok1 || !ok2 || !ok3 {
-				continue
+			if p, ok := parseDawarichPoint(row); ok {
+				pts = append(pts, p)
 			}
-			p := importer.Point{TS: int64(ts), Lat: lat, Lng: lng, Alt: numPtr(row["altitude"]), Acc: numPtr(row["accuracy"]), Course: numPtr(row["course"]),
-				Tracker: str(row["tracker_id"])}
-			if v := numPtr(row["velocity"]); v != nil && *v >= 0 {
-				p.Speed = v
-			}
-			if b, ok := num(row["battery"]); ok && b >= 0 {
-				n := int(b)
-				p.Battery = &n
-			}
-			if md := obj(row["motion_data"]); md != nil {
-				if m, ok := md["motion"].([]any); ok && len(m) > 0 {
-					p.Motion = str(m[0])
-				}
-			}
-			pts = append(pts, p)
 		}
 		if err := sink.Points(ctx, pts); err != nil {
 			return err
@@ -506,6 +507,31 @@ func (s *Server) importFromDawarich(ctx context.Context, imp *store.Import, sink
 		}
 	}
 	return nil
+}
+
+// parseDawarichPoint reads one row of Dawarich's /api/v1/points.
+func parseDawarichPoint(row map[string]any) (importer.Point, bool) {
+	lat, ok1 := num(row["latitude"])
+	lng, ok2 := num(row["longitude"])
+	ts, ok3 := num(row["timestamp"])
+	if !ok1 || !ok2 || !ok3 {
+		return importer.Point{}, false
+	}
+	p := importer.Point{TS: int64(ts), Lat: lat, Lng: lng, Alt: numPtr(row["altitude"]), Acc: numPtr(row["accuracy"]), Course: numPtr(row["course"]),
+		Tracker: str(row["tracker_id"])}
+	if v := numPtr(row["velocity"]); v != nil && *v >= 0 {
+		p.Speed = v
+	}
+	if b, ok := num(row["battery"]); ok && b >= 0 {
+		n := int(b)
+		p.Battery = &n
+	}
+	if md := obj(row["motion_data"]); md != nil {
+		if m, ok := md["motion"].([]any); ok && len(m) > 0 {
+			p.Motion = str(m[0])
+		}
+	}
+	return p, true
 }
 
 // ---- export ----

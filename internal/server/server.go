@@ -56,9 +56,10 @@ type Server struct {
 	coreOK  bool
 	coreErr string
 
-	rebuildKick chan struct{}
-	importKick  chan struct{}
-	geocodeKick chan struct{}
+	rebuildKick  chan struct{}
+	importKick   chan struct{}
+	geocodeKick  chan struct{}
+	dawarichKick chan struct{}
 
 	// live position subscribers (server-sent events), per person.
 	liveMu sync.Mutex
@@ -72,7 +73,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 		geocoder:    geo.NewGeocoder(cfg.Geocoder, cfg.GeocoderURL, cfg.UserAgent),
 		oidc:        &oidcProvider{issuerURL: cfg.OIDCIssuer},
 		core:        core.New(cfg.CoreURL, core.Options{DB: st.DB, TokenFile: cfg.DataDir + "/core.token", UserAgent: cfg.UserAgent}),
-		rebuildKick: make(chan struct{}, 1), importKick: make(chan struct{}, 1), geocodeKick: make(chan struct{}, 1),
+		rebuildKick: make(chan struct{}, 1), importKick: make(chan struct{}, 1), geocodeKick: make(chan struct{}, 1), dawarichKick: make(chan struct{}, 1),
 		live: map[int64]map[chan []byte]struct{}{}}
 }
 
@@ -121,6 +122,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	go s.importLoop(ctx)
 	go s.geocodeLoop(ctx)
 	go s.watchLoop(ctx)
+	go s.dawarichLoop(ctx)
 	if s.core.Configured() {
 		go s.coreLoop(ctx)
 	}
@@ -285,6 +287,11 @@ func (s *Server) Router() http.Handler {
 			r.Post("/imports", s.handleUploadImport)
 			r.Post("/imports/dawarich", s.handleImportDawarich)
 			r.Delete("/imports/{id}", s.handleDeleteImport)
+			r.Get("/dawarich-link", s.handleGetDawarichLink)
+			r.Put("/dawarich-link", s.handleSaveDawarichLink)
+			r.Patch("/dawarich-link", s.handlePatchDawarichLink)
+			r.Post("/dawarich-link/sync", s.handleSyncDawarichLink)
+			r.Delete("/dawarich-link", s.handleDeleteDawarichLink)
 			r.Get("/export", s.handleExport)
 			r.Post("/rebuild", s.handleRebuild)
 			r.Delete("/history", s.handleDeleteHistory)

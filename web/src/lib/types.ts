@@ -61,6 +61,11 @@ export interface LivePerson {
 
 export interface PrivacyZone { id: number; name: string; lat: number; lng: number; radius: number; drop_points: boolean; created_at: number }
 
+export interface DawarichLink {
+  url: string; account: string; source: 'direct' | 'core'; enabled: boolean; cursor_ts: number; last_sync_at: number; last_added: number; points_added: number
+  last_error: string; created_at: number
+}
+
 export interface Import {
   id: number; name: string; format: string; status: 'queued' | 'running' | 'done' | 'failed'; size: number; source_url?: string
   points_read: number; points_added: number; visits_added: number; first_ts: number; last_ts: number; error: string; progress: number

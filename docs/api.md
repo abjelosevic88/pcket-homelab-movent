@@ -98,6 +98,7 @@ Times are unix seconds unless named `*_at`. Dates are `YYYY-MM-DD` in the person
 | `GET /journeys/:id`, `PATCH /journeys/:id {mode}`, `GET /journeys/:id/points` | a hand-set mode survives every rebuild |
 | `GET/POST /devices`, `GET/PUT/DELETE /devices/:id`, `POST /devices/:id/rotate`, `GET /devices/:id/setup`, `GET /devices/:id/qr.svg` | |
 | `GET/POST /imports` (multipart `file`), `POST /imports/dawarich {url, api_key}`, `DELETE /imports/:id?points=1` | |
+| `GET/PUT/PATCH/DELETE /dawarich-link`, `POST /dawarich-link/sync` | A standing link to a Dawarich server: `PUT {url, api_key, copy_history}` links it (and with `copy_history` queues a full copy), `PATCH {enabled}` pauses or resumes. New points are pulled every 5 minutes, re-reading the last 6 hours for late uploads; points already here are skipped. |
 | `GET /export?format=geojson|gpx|csv&from&to|all=1&zones=1` | |
 | `POST /rebuild`, `DELETE /history?from&to` | |
 | `GET/POST/PUT/DELETE /shares`, `GET /family`, `GET /shared/:token` (public) | |
