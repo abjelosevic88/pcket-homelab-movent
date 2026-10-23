@@ -150,3 +150,34 @@ func TestRebuildDay(t *testing.T) {
 		t.Errorf("visits after rebuild = %d", len(v2))
 	}
 }
+
+// Old imports often hold a few points a day: the moves between them still
+// count towards the day's distance.
+func TestSparseDayDistance(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	u := &store.User{Email: "a@b.c", Role: "admin"}
+	_ = st.CreateUser(ctx, u)
+	loc, _ := time.LoadLocation("Europe/Sarajevo")
+	t0 := time.Date(2019, 5, 4, 9, 0, 0, 0, loc)
+	var pts []store.Point
+	for i, ll := range [][2]float64{home, work, home} { // three points, three hours apart, ~10 km each
+		pts = append(pts, store.Point{UserID: u.ID, TS: t0.Add(time.Duration(i*3) * time.Hour).Unix(), Lat: ll[0], Lng: ll[1], Country: "BA"})
+	}
+	res, err := st.InsertPoints(ctx, u.ID, pts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &Engine{Store: st, DefaultTZ: loc}
+	if _, err := e.Rebuild(ctx, u.ID, res.MinTS, res.MaxTS); err != nil {
+		t.Fatal(err)
+	}
+	days, _ := st.Days(ctx, u.ID, "", "")
+	if len(days) != 1 || days[0].Distance < 19000 || days[0].Distance > 21000 {
+		t.Fatalf("days = %+v", days)
+	}
+}
