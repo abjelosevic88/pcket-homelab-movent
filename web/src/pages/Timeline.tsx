@@ -60,6 +60,11 @@ export default function Timeline() {
     return () => window.removeEventListener('keydown', h)
   }, [date, navigate, today])
 
+  // Whatever gets selected (a chip, the map) scrolls into view in the list.
+  useEffect(() => {
+    if (selected) document.querySelector(`.tlp-list [data-pocket-ask="${selected.type === 'visit' ? 'visit' : 'journey'} ${selected.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selected])
+
   if (!date) return <Navigate to={`/timeline/${boot?.last_day && boot.last_day < today ? boot.last_day : today}`} replace />
 
   const s = day?.summary
@@ -106,7 +111,16 @@ export default function Timeline() {
             </>}
             {day?.pending && <p className="muted small"><Spinner size={11} /> New points are being sorted into journeys and visits…</p>}
             {suggested.length > 1 && (
-              <div className="callout tlp-suggest"><Icon name="sparkles" size={15} /><span className="grow">{suggested.length} visits are suggestions.</span><button type="button" className="btn sm" onClick={confirmAll}>Confirm all</button></div>
+              <div className="callout tlp-suggest">
+                <div className="tlp-suggest-head"><Icon name="sparkles" size={15} /><span className="grow">{suggested.length} visits are suggestions — tap one to see it, then confirm or decline it in the list, or confirm them all.</span><button type="button" className="btn sm" onClick={confirmAll}>Confirm all</button></div>
+                <div className="tlp-suggest-list">
+                  {suggested.map(v => (
+                    <button key={v.id} type="button" className={`tlp-chip ${selected?.type === 'visit' && selected.id === v.id ? 'on' : ''}`} onClick={() => setSelected({ type: 'visit', id: v.id })}>
+                      <span className="tnum muted">{fmtClock(v.start_ts)}</span> {v.name || 'Unnamed place'}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
             {s && s.first_ts > 0 && <p className="muted small tlp-span">Recorded {fmtClock(s.first_ts)}–{fmtClock(s.last_ts)} · {s.points.toLocaleString()} points</p>}
             <EntryList entries={entries} selected={selected} onSelect={setSelected} onChanged={reload} dayStart={day?.from} />
