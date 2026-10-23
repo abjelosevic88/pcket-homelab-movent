@@ -160,7 +160,14 @@ html[data-theme="dark"] .mm .leaflet-tooltip { background: var(--raised); color:
 .tlp-stats div { display: flex; flex-direction: column; min-width: 0; }
 .tlp-stats b { font-size: 17px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tlp-stats span { font-size: 11.5px; color: var(--muted); }
-.tlp-suggest { margin-top: 10px; align-items: center; }
+.tlp-suggest { margin-top: 10px; flex-direction: column; align-items: stretch; gap: 8px; }
+.tlp-suggest-head { display: flex; align-items: center; gap: 10px; }
+.tlp-suggest-head .icon { flex: none; color: var(--muted); }
+.tlp-suggest-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.tlp-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 10px; border: 1px dashed var(--accent); border-radius: 999px; background: var(--raised); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tlp-chip:hover { background: var(--hover); }
+.tlp-chip.on { background: var(--accent); border-style: solid; color: #fff; }
+.tlp-chip.on .muted { color: rgba(255,255,255,.8); }
 .tlp-span { margin: 10px 4px 0; }
 .tlp-empty { display: grid; justify-items: center; gap: 8px; padding: 36px 8px; color: var(--muted); text-align: center; }
 .tlp.mobile { grid-template-columns: 1fr; grid-template-rows: 38vh 1fr; }
