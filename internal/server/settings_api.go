@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,6 +55,8 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		st.MaxAccuracy = clampF(st.MaxAccuracy, 10, 5000)
 	}
 	st.MaxSpeedKmh = clampF(st.MaxSpeedKmh, 50, 2000)
+	st.ModesOff = store.CleanModesOff(st.ModesOff)
+	st.ModeSpeeds = clampSpeeds(st.ModeSpeeds)
 	st.NotifyStaleHours = clampI(st.NotifyStaleHours, 0, 24*14)
 	if err := s.store.SaveUserSettings(ctx, u.ID, st); err != nil {
 		s.fail(w, err, "save settings")
@@ -65,12 +68,39 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		_ = s.store.SaveGlobalSettings(ctx, g)
 	}
 	rebuild := st.VisitRadius != before.VisitRadius || st.VisitMinMinutes != before.VisitMinMinutes || st.TrackGapMinutes != before.TrackGapMinutes ||
-		st.MaxAccuracy != before.MaxAccuracy || st.MaxSpeedKmh != before.MaxSpeedKmh || st.Timezone != before.Timezone
+		st.MaxAccuracy != before.MaxAccuracy || st.MaxSpeedKmh != before.MaxSpeedKmh || st.Timezone != before.Timezone ||
+		strings.Join(st.ModesOff, ",") != strings.Join(before.ModesOff, ",") || st.ModeSpeeds != before.ModeSpeeds
 	if rebuild {
 		s.rebuildAll(ctx, u.ID)
 	}
 	st, _ = s.store.GetSettings(ctx, u.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"settings": st, "rebuilding": rebuild})
+}
+
+// clampSpeeds keeps the mode speeds (km/h) believable and in order: a
+// typical speed never above its top speed. Zero is the default.
+func clampSpeeds(m store.ModeSpeeds) store.ModeSpeeds {
+	d := store.DefaultModeSpeeds()
+	c := func(v *float64, def, lo, hi float64) {
+		if *v <= 0 {
+			*v = def
+		}
+		*v = math.Round(clampF(*v, lo, hi)*10) / 10
+	}
+	c(&m.WalkTop, d.WalkTop, 3, 20)
+	c(&m.WalkTypical, d.WalkTypical, 2, m.WalkTop)
+	c(&m.RunTop, d.RunTop, 8, 30)
+	c(&m.RunTypicalMax, d.RunTypicalMax, 5, m.RunTop)
+	c(&m.RunTypicalMin, d.RunTypicalMin, 3, m.RunTypicalMax)
+	c(&m.CycleTop, d.CycleTop, 10, 60)
+	c(&m.CycleTypical, d.CycleTypical, 5, m.CycleTop)
+	c(&m.BusTop, d.BusTop, 20, 150)
+	c(&m.BusAvg, d.BusAvg, 5, m.BusTop)
+	c(&m.TrainTop, d.TrainTop, 60, 400)
+	c(&m.BoatTop, d.BoatTop, 20, 150)
+	c(&m.FlyTop, d.FlyTop, 150, 1200)
+	c(&m.RideFrom, d.RideFrom, 10, 80)
+	return m
 }
 
 func clampF(v, lo, hi float64) float64 {
@@ -96,8 +126,9 @@ func clampI(v, lo, hi int) int {
 // analysisVersion goes up whenever visit and journey detection changes, so
 // everyone's history is worked out again once, with the new rules, on start.
 // 2: walking loops are no visits, walk/drive splits, stays over a long
-// silence elsewhere end within 12 h.
-const analysisVersion = "2"
+// silence elsewhere end within 12 h. 3: transport modes follow the person's
+// settings (modes turned off hand their journeys to the nearest one in use).
+const analysisVersion = "3"
 
 func (s *Server) rebuildIfAnalysisChanged(ctx context.Context) {
 	if s.store.BoxValue(ctx, "analysis_version") == analysisVersion {

@@ -5,7 +5,15 @@ export interface Settings {
   title: string; setup_complete: boolean
   timezone: string; distance_unit: 'km' | 'mi'; map_tiles: string; route_color: 'speed' | 'mode' | 'plain'
   visit_radius: number; visit_min_minutes: number; track_gap_minutes: number; max_accuracy: number; max_speed_kmh: number
+  modes_off: string[]; mode_speeds: ModeSpeeds
   notify_stale_hours: number; notify_countries: boolean
+}
+
+/** km/h. "Top" is what a journey stays under 85% of the time, "typical" its median. */
+export interface ModeSpeeds {
+  walk_top: number; walk_typical: number; run_top: number; run_typical_min: number; run_typical_max: number
+  cycle_top: number; cycle_typical: number; bus_avg: number; bus_top: number; train_top: number; boat_top: number; fly_top: number
+  ride_from: number
 }
 
 export interface Device {

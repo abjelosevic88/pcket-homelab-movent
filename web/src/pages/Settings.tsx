@@ -5,8 +5,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp, type ThemeMode } from '../lib/app-context'
-import { agoTs } from '../lib/geo'
-import type { APIToken, Place, PrivacyZone, Settings as SettingsT, User } from '../lib/types'
+import { MODES, SWITCHABLE_MODES, agoTs } from '../lib/geo'
+import type { APIToken, ModeSpeeds, Place, PrivacyZone, Settings as SettingsT, User } from '../lib/types'
 import { Avatar, Confirm, Field, Loading, Modal, NeedsCore, Segmented, SettingRow, Switch, Tabs, errMsg, useAsync, useIsMobile, useToast } from '../components/ui'
 import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
@@ -216,7 +216,11 @@ function Detection() {
         <SettingRow title="Gap that splits a journey" help="If the phone goes quiet this long while moving (flight mode, empty battery), the next point starts a new journey.">
           <NumInput value={f.track_gap_minutes} onChange={n => setF({ ...f, track_gap_minutes: n })} unit="min" min={5} max={1440} />
         </SettingRow>
+        <SettingRow title="Walk, then ride" help={<>Walking to the car or getting off the bus splits the journey in two when the ride reaches this top speed for a minute, next to at least two minutes at walking pace (under {f.mode_speeds.walk_top} km/h).</>}>
+          <NumInput value={f.mode_speeds.ride_from} onChange={n => setF({ ...f, mode_speeds: { ...f.mode_speeds, ride_from: n } })} unit="km/h" min={10} max={80} step={1} />
+        </SettingRow>
       </Section>
+      <TransportModes f={f} setF={setF} />
       <Section title="Cleaning up" sub="Bad positions are kept but left out of routes, distances and visits.">
         <SettingRow title="Worst accuracy kept" help="Points less accurate than this (cell towers, indoors) are left out. 0 keeps every point.">
           <NumInput value={f.max_accuracy} onChange={n => setF({ ...f, max_accuracy: n })} unit="m" min={0} max={5000} step={10} />
@@ -228,6 +232,43 @@ function Detection() {
       {rebuilding && <div className="callout info"><Icon name="refresh" size={15} /><span>Your history is being sorted again with these settings. The map shows raw lines until it is done; confirmed and renamed visits stay as they are.</span></div>}
       <SaveRow busy={busy} onSave={() => save()}><span className="mg-hint">Saving a change here rebuilds your whole history in the background.</span></SaveRow>
     </div>
+  )
+}
+
+// The rules classify() in internal/analyze/segment.go applies, top to bottom.
+const MODE_RULES: { mode: string; help: string; speeds: { key: keyof ModeSpeeds; label: string; min: number; max: number }[] }[] = [
+  { mode: 'walking', help: 'Top speed and typical speed both under these.', speeds: [{ key: 'walk_top', label: 'top under', min: 3, max: 20 }, { key: 'walk_typical', label: 'typical under', min: 2, max: 20 }] },
+  { mode: 'running', help: 'Top speed under this, typical speed in between, under 4 h and 45 km.', speeds: [{ key: 'run_top', label: 'top under', min: 8, max: 30 }, { key: 'run_typical_min', label: 'typical from', min: 3, max: 30 }, { key: 'run_typical_max', label: 'to', min: 5, max: 30 }] },
+  { mode: 'cycling', help: 'Top speed and typical speed both under these.', speeds: [{ key: 'cycle_top', label: 'top under', min: 10, max: 60 }, { key: 'cycle_typical', label: 'typical under', min: 5, max: 60 }] },
+  { mode: 'train', help: 'Top speed above this, over 40 km.', speeds: [{ key: 'train_top', label: 'top above', min: 60, max: 400 }] },
+  { mode: 'bus', help: 'Average and top speed under these, stopping every few hundred metres.', speeds: [{ key: 'bus_avg', label: 'average under', min: 5, max: 150 }, { key: 'bus_top', label: 'top under', min: 20, max: 150 }] },
+  { mode: 'driving', help: 'Everything faster that is not a bus or a train.', speeds: [] },
+  { mode: 'boat', help: 'Mostly over water, top speed under this. Checked before the rest.', speeds: [{ key: 'boat_top', label: 'top under', min: 20, max: 150 }] },
+  { mode: 'flying', help: 'Top speed above this, or a long jump of over 150 km. Checked first.', speeds: [{ key: 'fly_top', label: 'top above', min: 150, max: 1200 }] },
+]
+
+function TransportModes({ f, setF }: { f: SettingsT; setF: (s: SettingsT) => void }) {
+  const off = f.modes_off || []
+  const toggle = (m: string) => setF({ ...f, modes_off: off.includes(m) ? off.filter(x => x !== m) : [...off, m] })
+  const setSpeed = (k: keyof ModeSpeeds, n: number) => setF({ ...f, mode_speeds: { ...f.mode_speeds, [k]: n } })
+  // zero means "the default" to the server
+  const reset = () => setF({ ...f, mode_speeds: Object.fromEntries(Object.keys(f.mode_speeds).map(k => [k, 0])) as unknown as ModeSpeeds })
+  return (
+    <Section title="Transport modes" sub="Your phone sends no activity, so the mode is guessed from speed. “Top” is the speed a journey stays under 85% of the time, “typical” its middle speed, so one GPS jump or a red light does not decide it."
+      actions={<button type="button" className="btn ghost sm" onClick={reset}>Default speeds</button>}>
+      <SettingRow stack title="How you travel" help="Turn off what you never use. Its journeys go to the closest mode you do use: a slower one when their typical speed suits it (a walk with a jumpy GPS), otherwise a faster one (a car in slow traffic). Journeys you set by hand keep their mode.">
+        <div className="chips">
+          {SWITCHABLE_MODES.map(m => <button key={m} type="button" className={`chip ${off.includes(m) ? '' : 'active'}`} aria-pressed={!off.includes(m)} onClick={() => toggle(m)}>{MODES[m].emoji} {MODES[m].label}</button>)}
+        </div>
+      </SettingRow>
+      {MODE_RULES.filter(r => !off.includes(r.mode)).map(r => (
+        <SettingRow key={r.mode} stack={r.speeds.length > 1} title={<>{MODES[r.mode].emoji} {MODES[r.mode].label}</>} help={r.help}>
+          {r.speeds.length ? <div className="row wrap" style={{ gap: 12 }}>
+            {r.speeds.map(s => <label key={s.key} className="row" style={{ gap: 6 }}><span className="muted small">{s.label}</span><NumInput value={f.mode_speeds[s.key]} onChange={n => setSpeed(s.key, n)} unit="km/h" min={s.min} max={s.max} step={0.5} /></label>)}
+          </div> : <span className="muted small">no speed to set</span>}
+        </SettingRow>
+      ))}
+    </Section>
   )
 }
 

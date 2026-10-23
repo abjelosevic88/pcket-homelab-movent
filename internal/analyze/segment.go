@@ -19,12 +19,46 @@ type Params struct {
 	TrackGap    int64   // seconds
 	MaxAccuracy float64 // metres, 0 = keep all
 	MaxSpeed    float64 // m/s
+	Modes       ModeRules
 }
+
+// ModeRules is how a journey gets its transport mode: the speeds (km/h) that
+// tell the modes apart and the modes the person never uses.
+type ModeRules struct {
+	store.ModeSpeeds
+	Off map[string]bool
+}
+
+// RulesFrom reads the mode settings; a missing or zero speed is the default.
+func RulesFrom(st store.Settings) ModeRules {
+	r := ModeRules{ModeSpeeds: st.ModeSpeeds, Off: map[string]bool{}}
+	for _, m := range st.ModesOff {
+		r.Off[m] = true
+	}
+	return r.filled()
+}
+
+func (r ModeRules) filled() ModeRules {
+	d := store.DefaultModeSpeeds()
+	for _, f := range []struct {
+		v   *float64
+		def float64
+	}{{&r.WalkTop, d.WalkTop}, {&r.WalkTypical, d.WalkTypical}, {&r.RunTop, d.RunTop},
+		{&r.RunTypicalMin, d.RunTypicalMin}, {&r.RunTypicalMax, d.RunTypicalMax}, {&r.CycleTop, d.CycleTop}, {&r.CycleTypical, d.CycleTypical},
+		{&r.BusAvg, d.BusAvg}, {&r.BusTop, d.BusTop}, {&r.TrainTop, d.TrainTop}, {&r.BoatTop, d.BoatTop}, {&r.FlyTop, d.FlyTop}, {&r.RideFrom, d.RideFrom}} {
+		if *f.v <= 0 {
+			*f.v = f.def
+		}
+	}
+	return r
+}
+
+func (r ModeRules) on(mode string) bool { return !r.Off[mode] }
 
 // ParamsFrom reads the detection settings.
 func ParamsFrom(st store.Settings) Params {
 	p := Params{VisitRadius: st.VisitRadius, MinStay: int64(st.VisitMinMinutes) * 60, TrackGap: int64(st.TrackGapMinutes) * 60,
-		MaxAccuracy: st.MaxAccuracy, MaxSpeed: st.MaxSpeedKmh / 3.6}
+		MaxAccuracy: st.MaxAccuracy, MaxSpeed: st.MaxSpeedKmh / 3.6, Modes: RulesFrom(st)}
 	if p.VisitRadius < 20 {
 		p.VisitRadius = 100
 	}
@@ -257,31 +291,32 @@ func Segment(pts []P, prm Params) ([]Stay, []Move) {
 	// A "journey" that never left the neighbourhood is noise. One that walks
 	// to the car and drives off is two journeys.
 	var kept []Move
+	rules := prm.Modes.filled()
 	for _, m := range moves {
 		if span(m.Pts) >= prm.VisitRadius*1.5 {
-			kept = append(kept, splitModes(m)...)
+			kept = append(kept, splitModes(m, rules)...)
 		}
 	}
 	return stays, kept
 }
 
-// Speeds (m/s) that split a journey: on foot below footMax, in a vehicle
-// from vehicleMin; in between is left to the neighbours.
-const (
-	footMax    = 2.2
-	vehicleMin = 3.5
-	modeMinRun = 60 // seconds a change has to last
-)
+// Seconds a change between on foot and a vehicle has to last.
+const modeMinRun = 60
 
 // splitModes cuts a journey where it changes from on foot to a vehicle or
 // back (walking to the car, getting off the bus), so each part gets its own
 // mode. The parts share the point where they meet, keeping the line whole.
-func splitModes(m Move) []Move {
+func splitModes(m Move, r ModeRules) []Move {
 	pts := m.Pts
 	n := len(pts)
 	if n < 8 {
 		return []Move{m}
 	}
+	// Speeds (m/s): a point is on foot below walking's top speed, in a
+	// vehicle from a bit above it; in between is left to the neighbours.
+	footMax := r.WalkTop / 3.6
+	vehicleMin := math.Max(3.5, footMax*1.2)
+	rideFrom := r.RideFrom / 3.6
 	// 0 = unknown, 1 = on foot, 2 = vehicle; a reported speed, else to the next point.
 	cls := make([]int, n)
 	for k := range pts {
@@ -350,9 +385,9 @@ func splitModes(m Move) []Move {
 		v := speedsOf(r)
 		switch r.kind {
 		case 1:
-			return dur >= 2*modeMinRun && (len(v) < 3 || (percentile(v, 0.5) <= 2.0 && percentile(v, 0.85) <= 2.6))
+			return dur >= 2*modeMinRun && (len(v) < 3 || (percentile(v, 0.5) <= footMax*0.9 && percentile(v, 0.85) <= footMax*1.18))
 		case 2:
-			return dur >= modeMinRun && (len(v) < 3 || percentile(v, 0.85) >= 6)
+			return dur >= modeMinRun && (len(v) < 3 || percentile(v, 0.85) >= rideFrom)
 		}
 		return false
 	}
@@ -492,7 +527,7 @@ func ValidMode(m string) bool {
 }
 
 // TrackFrom measures a move and guesses how it was made.
-func TrackFrom(m Move) store.Track {
+func TrackFrom(m Move, r ModeRules) store.Track {
 	pts := m.Pts
 	first, last := pts[0], pts[len(pts)-1]
 	t := store.Track{StartTS: first.TS, EndTS: last.TS, Points: len(pts), StartLat: first.Lat, StartLng: first.Lng, EndLat: last.Lat, EndLng: last.Lng}
@@ -555,7 +590,7 @@ func TrackFrom(m Move) store.Track {
 		t.MaxSpeed = speeds[int(float64(len(speeds)-1)*0.95)]
 	}
 	t.Countries = strings.Join(countries, ",")
-	t.Mode = classify(t, speeds, pts, motions)
+	t.Mode = classify(t, speeds, pts, motions, r.filled())
 	tol := 4.0
 	if t.Distance > 50000 {
 		tol = 15
@@ -576,8 +611,9 @@ func percentile(sorted []float64, q float64) float64 {
 }
 
 // classify guesses the transport mode from speeds, what the phone said
-// (iOS/Android activity) and whether the way was over water.
-func classify(t store.Track, speeds []float64, pts []P, motions map[string]int) string {
+// (iOS/Android activity) and whether the way was over water. Modes the person
+// turned off are never the answer: their journeys go to the next best one.
+func classify(t store.Track, speeds []float64, pts []P, motions map[string]int, r ModeRules) string {
 	dur := float64(t.EndTS - t.StartTS)
 	if dur <= 0 {
 		return "unknown"
@@ -587,7 +623,7 @@ func classify(t store.Track, speeds []float64, pts []P, motions map[string]int) 
 	avg := t.AvgSpeed * 3.6
 	direct := geo.Haversine(t.StartLat, t.StartLng, t.EndLat, t.EndLng)
 	// A long, fast hop — with or without points in between — is a flight.
-	if (direct > 150000 && direct/dur*3.6 > 180) || p85 > 300 {
+	if r.on("flying") && ((direct > 150000 && direct/dur*3.6 > 180) || p85 > r.FlyTop) {
 		return "flying"
 	}
 	// The phone's own activity guess, when it gave one for most points.
@@ -599,20 +635,24 @@ func classify(t store.Track, speeds []float64, pts []P, motions map[string]int) 
 		}
 	}
 	if total > 0 && bestN*2 >= total {
+		guess := ""
 		switch best {
 		case "driving", "automotive", "in_vehicle":
-			if p85 > 140 && t.Distance > 40000 {
-				return "train"
+			guess = "driving"
+			if p85 > r.TrainTop*0.875 && t.Distance > 40000 && r.on("train") {
+				guess = "train"
 			}
-			return "driving"
 		case "walking", "on_foot":
 			if med < 9 {
-				return "walking"
+				guess = "walking"
 			}
 		case "running":
-			return "running"
+			guess = "running"
 		case "cycling", "on_bicycle":
-			return "cycling"
+			guess = "cycling"
+		}
+		if guess != "" && r.on(guess) {
+			return guess
 		}
 	}
 	// Mostly over water at boat speeds.
@@ -622,23 +662,49 @@ func classify(t store.Track, speeds []float64, pts []P, motions map[string]int) 
 			sea++
 		}
 	}
-	if len(pts) >= 4 && sea*10 >= len(pts)*6 && p85 < 80 {
+	if r.on("boat") && len(pts) >= 4 && sea*10 >= len(pts)*6 && p85 < r.BoatTop {
 		return "boat"
 	}
-	switch {
-	case p85 < 8 && med < 6.5:
-		return "walking"
-	case p85 < 15 && med >= 7 && med < 14 && dur < 4*3600 && t.Distance < 45000:
-		return "running"
-	case p85 < 32 && med < 24:
-		return "cycling"
-	case p85 > 160 && t.Distance > 40000:
-		return "train"
-	case avg < 30 && p85 < 70 && stopsOften(pts):
-		return "bus"
-	default:
-		return "driving"
+	// On foot and by bike, slowest first. A journey that fits a mode turned
+	// off goes to a slower one when its typical speed suits it (a walk with a
+	// jumpy GPS), otherwise on to the faster modes (a car in slow traffic).
+	fits := map[string]bool{
+		"walking": p85 < r.WalkTop && med < r.WalkTypical,
+		"running": p85 < r.RunTop && med >= r.RunTypicalMin && med < r.RunTypicalMax && dur < 4*3600 && t.Distance < 45000,
+		"cycling": p85 < r.CycleTop && med < r.CycleTypical,
 	}
+	slower := func(k int) string {
+		if k > 0 && r.on("walking") && med < r.WalkTop {
+			return "walking"
+		}
+		if k > 1 && r.on("running") && med >= r.RunTypicalMin && med < r.RunTypicalMax {
+			return "running"
+		}
+		return ""
+	}
+	for k, m := range []string{"walking", "running", "cycling"} {
+		if !fits[m] {
+			continue
+		}
+		if r.on(m) {
+			return m
+		}
+		if s := slower(k); s != "" {
+			return s
+		}
+	}
+	switch {
+	case r.on("train") && p85 > r.TrainTop && t.Distance > 40000:
+		return "train"
+	case r.on("bus") && avg < r.BusAvg && p85 < r.BusTop && stopsOften(pts):
+		return "bus"
+	}
+	for _, m := range []string{"driving", "bus", "train", "cycling", "running", "walking"} {
+		if r.on(m) {
+			return m
+		}
+	}
+	return "unknown"
 }
 
 // stopsOften is true when a vehicle journey pauses every few hundred metres
