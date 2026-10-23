@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
+import { useApp } from '../lib/app-context'
 import { MODES, fmtClock, fmtDist, fmtDur, fmtSpeed, isoDateOf, modeOf, placeEmoji } from '../lib/geo'
 import type { Entry, Journey, Visit } from '../lib/types'
 import { Icon } from './icons'
@@ -65,12 +66,14 @@ function VisitRow({ v, sel, onSelect, onChanged, compact, readOnly, earlier }: {
 
 function JourneyRow({ j, sel, onSelect, onChanged, compact, readOnly }: { j: Journey; sel: boolean; onSelect?: (s: { type: 'journey'; id: number }) => void; onChanged?: () => void; compact: boolean; readOnly: boolean }) {
   const { toast } = useToast()
+  const { settings } = useApp()
   const [menu, setMenu] = useState<Anchor | null>(null)
   const m = modeOf(j.mode)
+  const off = settings?.modes_off || []
   const setMode = async (mode: string) => {
     try { await api.patch(`${V1}/journeys/${j.id}`, { mode }); onChanged?.() } catch (e) { toast(errMsg(e), 'err') }
   }
-  const items: MenuItem[] = [{ heading: 'How did you travel?' }, ...Object.entries(MODES).filter(([k]) => k !== 'unknown').map(([k, x]) => ({ label: `${x.emoji}  ${x.label}`, checked: j.mode === k, onSelect: () => setMode(k) }))]
+  const items: MenuItem[] = [{ heading: 'How did you travel?' }, ...Object.entries(MODES).filter(([k]) => k !== 'unknown' && (!off.includes(k) || j.mode === k)).map(([k, x]) => ({ label: `${x.emoji}  ${x.label}`, checked: j.mode === k, onSelect: () => setMode(k) }))]
   return (
     <li className={`tl-row journey ${sel ? 'sel' : ''}`} onClick={() => onSelect?.({ type: 'journey', id: j.id })} style={{ '--mode': m.color } as React.CSSProperties} data-pocket-ask={`journey ${j.id}`}>
       <div className="tl-time"><span>{fmtClock(j.start_ts)}</span>{!compact && <span className="muted">{fmtClock(j.end_ts)}</span>}</div>

@@ -29,6 +29,8 @@ export const MODES: Record<string, { label: string; icon: string; color: string;
   unknown: { label: 'Moving', icon: 'route', color: '#64748b', emoji: '•' },
 }
 export const modeOf = (m: string) => MODES[m] || MODES.unknown
+/** Modes a person can turn off in Settings → Detection. */
+export const SWITCHABLE_MODES = ['walking', 'running', 'cycling', 'driving', 'bus', 'train', 'boat', 'flying']
 
 /** Speed (km/h) to a colour from slow green through amber to fast red. */
 export function speedColor(kmh: number): string {

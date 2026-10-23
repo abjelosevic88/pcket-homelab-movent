@@ -86,7 +86,7 @@ func (e *Engine) Rebuild(ctx context.Context, userID, from, to int64) (Result, e
 	}
 	tracks := make([]store.Track, 0, len(moves))
 	for _, m := range moves {
-		t := TrackFrom(m)
+		t := TrackFrom(m, prm.Modes)
 		for _, o := range overrides {
 			if overlap(t.StartTS, t.EndTS, o.StartTS, o.EndTS) > 0.5*float64(maxI(1, t.EndTS-t.StartTS)) {
 				t.Mode, t.ModeManual = o.Mode, true

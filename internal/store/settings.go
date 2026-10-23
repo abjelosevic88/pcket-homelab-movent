@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
+	"strings"
 )
 
 // DefaultTitle is the app title until someone changes it.
@@ -24,16 +26,47 @@ type Settings struct {
 	TrackGapMinutes int     `json:"track_gap_minutes"` // a silence longer than this, while moving, ends a journey
 	MaxAccuracy     float64 `json:"max_accuracy"`      // points less accurate than this (m) are left out of routes; 0 keeps all
 	MaxSpeedKmh     float64 `json:"max_speed_kmh"`     // a jump faster than this is an outlier, unless it is a flight
+	// Transport modes: the ones the person never uses, and the speeds that tell them apart.
+	ModesOff   []string   `json:"modes_off"`
+	ModeSpeeds ModeSpeeds `json:"mode_speeds"`
 	// Notifications through Pocket Core.
 	NotifyStaleHours int  `json:"notify_stale_hours"` // no position for this long → event; 0 = never
 	NotifyCountries  bool `json:"notify_countries"`
 }
 
+// ModeSpeeds (km/h) sort a journey into a transport mode. "Top" is the speed
+// 85% of the journey stays under, "typical" the median, so a GPS jump or a
+// red light does not decide it.
+type ModeSpeeds struct {
+	WalkTop       float64 `json:"walk_top"`
+	WalkTypical   float64 `json:"walk_typical"`
+	RunTop        float64 `json:"run_top"`
+	RunTypicalMin float64 `json:"run_typical_min"`
+	RunTypicalMax float64 `json:"run_typical_max"`
+	CycleTop      float64 `json:"cycle_top"`
+	CycleTypical  float64 `json:"cycle_typical"`
+	BusAvg        float64 `json:"bus_avg"`
+	BusTop        float64 `json:"bus_top"`
+	TrainTop      float64 `json:"train_top"`
+	BoatTop       float64 `json:"boat_top"`
+	FlyTop        float64 `json:"fly_top"`
+	RideFrom      float64 `json:"ride_from"` // a ride this fast next to a walk splits the journey
+}
+
+// DefaultModeSpeeds are the speeds detection used before they were settings.
+func DefaultModeSpeeds() ModeSpeeds {
+	return ModeSpeeds{WalkTop: 8, WalkTypical: 6.5, RunTop: 15, RunTypicalMin: 7, RunTypicalMax: 14, CycleTop: 32, CycleTypical: 24,
+		BusAvg: 30, BusTop: 70, TrainTop: 160, BoatTop: 80, FlyTop: 300, RideFrom: 22}
+}
+
+// SwitchableModes are the modes a person may turn off.
+var SwitchableModes = []string{"walking", "running", "cycling", "driving", "bus", "train", "boat", "flying"}
+
 // DefaultSettings are what a new person starts with.
 func DefaultSettings() Settings {
 	return Settings{Title: DefaultTitle, DistanceUnit: "km", MapTiles: "osm", RouteColor: "speed",
 		VisitRadius: 100, VisitMinMinutes: 5, TrackGapMinutes: 30, MaxAccuracy: 150, MaxSpeedKmh: 400,
-		NotifyStaleHours: 12, NotifyCountries: true}
+		ModesOff: []string{}, ModeSpeeds: DefaultModeSpeeds(), NotifyStaleHours: 12, NotifyCountries: true}
 }
 
 var globalKeys = map[string]bool{"title": true, "setup_complete": true}
@@ -109,6 +142,10 @@ func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error)
 			num(v, &st.MaxAccuracy)
 		case "max_speed_kmh":
 			num(v, &st.MaxSpeedKmh)
+		case "modes_off":
+			st.ModesOff = CleanModesOff(strings.Split(v, ","))
+		case "mode_speeds":
+			_ = json.Unmarshal([]byte(v), &st.ModeSpeeds) // keys it lacks keep their defaults
 		case "notify_stale_hours":
 			integer(v, &st.NotifyStaleHours)
 		case "notify_countries":
@@ -121,6 +158,7 @@ func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error)
 func personalKV(st Settings) map[string]string {
 	b := map[bool]string{true: "1", false: "0"}
 	f := func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
+	speeds, _ := json.Marshal(st.ModeSpeeds)
 	return map[string]string{
 		"timezone":           st.Timezone,
 		"distance_unit":      st.DistanceUnit,
@@ -131,9 +169,26 @@ func personalKV(st Settings) map[string]string {
 		"track_gap_minutes":  strconv.Itoa(st.TrackGapMinutes),
 		"max_accuracy":       f(st.MaxAccuracy),
 		"max_speed_kmh":      f(st.MaxSpeedKmh),
+		"modes_off":          strings.Join(CleanModesOff(st.ModesOff), ","),
+		"mode_speeds":        string(speeds),
 		"notify_stale_hours": strconv.Itoa(st.NotifyStaleHours),
 		"notify_countries":   b[st.NotifyCountries],
 	}
+}
+
+// CleanModesOff keeps the switchable modes in ms, once each, in their usual order.
+func CleanModesOff(ms []string) []string {
+	off := map[string]bool{}
+	for _, m := range ms {
+		off[strings.TrimSpace(m)] = true
+	}
+	out := []string{}
+	for _, m := range SwitchableModes {
+		if off[m] {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // SaveUserSettings persists userID's personal settings.
