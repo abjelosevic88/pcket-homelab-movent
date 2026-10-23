@@ -125,7 +125,9 @@ func Outliers(pts []P, prm Params) map[int]bool {
 		if dab < 200 || dbc < 200 {
 			continue
 		}
-		if speed(a, b) > prm.MaxSpeed && speed(b, c) > prm.MaxSpeed {
+		// Too fast both ways and back near where it left from; a plane in a
+		// straight line is as fast both ways but never comes back.
+		if speed(a, b) > prm.MaxSpeed && speed(b, c) > prm.MaxSpeed && dac < math.Min(dab, dbc)/2 {
 			out[idx[k]] = true
 			continue
 		}
@@ -253,7 +255,9 @@ func Segment(pts []P, prm Params) ([]Stay, []Move) {
 
 	// Moves: everything between stays, from the last point of one stay to the
 	// first of the next so the line on the map is unbroken; a silence longer
-	// than TrackGap while moving starts a new journey.
+	// than TrackGap while moving starts a new journey. A silence that covers
+	// a flight's distance (the phone off in the air) is that flight: a journey
+	// of its own from the last point before to the first one after.
 	var moves []Move
 	emit := func(a, b int) { // inclusive indices
 		if b <= a {
@@ -266,6 +270,9 @@ func Segment(pts []P, prm Params) ([]Stay, []Move) {
 					moves = append(moves, Move{Pts: seg})
 				}
 				seg = nil
+				if flightHop(pts[k-1], pts[k]) {
+					moves = append(moves, Move{Pts: []P{pts[k-1], pts[k]}})
+				}
 			}
 			seg = append(seg, pts[k])
 		}
@@ -298,6 +305,14 @@ func Segment(pts []P, prm Params) ([]Stay, []Move) {
 		}
 	}
 	return stays, kept
+}
+
+// flightHop is a silence between two points that only a plane covers: over
+// 150 km at over 180 km/h, the same test classify uses for a flight.
+func flightHop(a, b P) bool {
+	dt := float64(b.TS - a.TS)
+	d := geo.Haversine(a.Lat, a.Lng, b.Lat, b.Lng)
+	return dt > 0 && d > 150000 && d/dt*3.6 > 180
 }
 
 // Seconds a change between on foot and a vehicle has to last.

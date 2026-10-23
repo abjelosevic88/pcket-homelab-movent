@@ -110,3 +110,69 @@ func TestModesTurnedOffHandOver(t *testing.T) {
 		t.Errorf("unset speeds should be the defaults, cycle top = %v", brisk.CycleTop)
 	}
 }
+
+// An hour at the gate, then Sarajevo → Vienna: with the phone tracking in the
+// air, and with it off until landing. Both are one flight, not spikes and not
+// a hole in the day.
+func TestFlights(t *testing.T) {
+	prm := ParamsFrom(store.Settings{})
+	sjjLat, sjjLng, vieLat, vieLng := 43.82, 18.33, 48.11, 16.57
+	gate := func(lat, lng float64, from int64) []P {
+		var pts []P
+		for k := int64(0); k < 30; k++ {
+			pts = append(pts, P{TS: from + k*120, Lat: lat, Lng: lng, Acc: 10, Speed: fp(0)})
+		}
+		return pts
+	}
+	flights := func(pts []P) []store.Track {
+		clean := pts[:0:0]
+		out := Outliers(pts, prm)
+		for i, p := range pts {
+			if !out[i] {
+				clean = append(clean, p)
+			}
+		}
+		_, moves := Segment(clean, prm)
+		var fl []store.Track
+		for _, m := range moves {
+			if tr := TrackFrom(m, prm.Modes); tr.Mode == "flying" {
+				fl = append(fl, tr)
+			}
+		}
+		return fl
+	}
+	dep := int64(3600)
+	// tracked: a point a minute for 50 minutes, ~490 km at ~590 km/h
+	pts := gate(sjjLat, sjjLng, 0)
+	for k := int64(1); k < 50; k++ {
+		f := float64(k) / 50
+		pts = append(pts, P{TS: dep + k*60, Lat: sjjLat + (vieLat-sjjLat)*f, Lng: sjjLng + (vieLng-sjjLng)*f, Acc: 20, Speed: fp(165)})
+	}
+	pts = append(pts, gate(vieLat, vieLng, dep+50*60)...)
+	if fl := flights(pts); len(fl) != 1 || fl[0].Distance < 400000 {
+		t.Fatalf("tracked flight: %+v", fl)
+	}
+	// phone off from the gate to the arrival hall
+	pts = append(gate(sjjLat, sjjLng, 0), gate(vieLat, vieLng, dep+50*60)...)
+	if fl := flights(pts); len(fl) != 1 {
+		t.Fatalf("phone-off flight: %d flights", len(fl))
+	}
+	// a drive with the phone off is still not a journey of its own
+	pts = append(gate(sjjLat, sjjLng, 0), gate(43.34, 17.81, dep+2*3600)...) // Mostar, 2 h
+	if _, moves := Segment(pts, prm); len(moves) != 0 {
+		t.Fatalf("phone-off drive became %d journeys", len(moves))
+	}
+}
+
+// A single wild point that comes straight back is still a spike.
+func TestSpikeStillDropped(t *testing.T) {
+	prm := ParamsFrom(store.Settings{})
+	var pts []P
+	for k := int64(0); k < 10; k++ {
+		pts = append(pts, P{TS: k * 30, Lat: 43.85, Lng: 18.41, Acc: 10})
+	}
+	pts[5].Lat = 44.85 // 110 km away for one fix
+	if out := Outliers(pts, prm); !out[5] {
+		t.Fatal("spike kept")
+	}
+}
