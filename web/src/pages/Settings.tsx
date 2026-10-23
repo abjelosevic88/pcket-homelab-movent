@@ -7,7 +7,7 @@ import { api, V1 } from '../lib/api'
 import { useApp, type ThemeMode } from '../lib/app-context'
 import { agoTs } from '../lib/geo'
 import type { APIToken, Place, PrivacyZone, Settings as SettingsT, User } from '../lib/types'
-import { Avatar, Confirm, Field, Loading, Modal, Segmented, SettingRow, Switch, Tabs, errMsg, useAsync, useIsMobile, useToast } from '../components/ui'
+import { Avatar, Confirm, Field, Loading, Modal, NeedsCore, Segmented, SettingRow, Switch, Tabs, errMsg, useAsync, useIsMobile, useToast } from '../components/ui'
 import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 import { MoveMap, TILES, tileKey } from '../components/MoveMap'
@@ -240,15 +240,17 @@ function Notifications() {
   const core = boot?.core
   return (
     <div className="stack loose">
-      {core && !core.configured && <div className="callout warn"><Icon name="info" size={15} /><span>This server is not connected to Pocket Core, so these notices have nowhere to go yet. Set <code>CORE_URL</code> and <code>CORE_REGISTRATION_KEY</code> to connect it.</span></div>}
+      {core && !core.configured && <div className="callout warn"><Icon name="info" size={15} /><NeedsCore what="Notices go out through Pocket Core, which this server is not connected to." /></div>}
       {core?.configured && !core.registered && <div className="callout warn"><Icon name="alert" size={15} /><span>Pocket Core does not answer: {core.error || 'not registered yet'}.</span></div>}
       {core?.registered && <div className="callout success"><Icon name="check-circle" size={15} /><span>Connected to Pocket Core: notices reach your phone the way you set it up in Core, and Pocket AI can answer “where was I…”.</span></div>}
+      <fieldset className="core-off" disabled={!core?.registered} aria-disabled={!core?.registered || undefined}>
       <Section title="Tell me when">
         <SettingRow title="A phone goes quiet" help="No position from any of your phones for this long (a dead battery, tracking switched off). 0 never tells.">
           <NumInput value={f.notify_stale_hours} onChange={n => setF({ ...f, notify_stale_hours: n })} unit="h" min={0} max={336} />
         </SettingRow>
         <SettingRow title="I enter another country" help="“Welcome to Croatia” when the first position arrives from a new country."><Switch checked={f.notify_countries} onChange={v => setF({ ...f, notify_countries: v })} label="Country notices" /></SettingRow>
       </Section>
+      </fieldset>
       <p className="mg-hint">Exact positions never leave this server in a notice: only place names, countries and times.</p>
       <SaveRow busy={busy} onSave={() => save()} />
     </div>

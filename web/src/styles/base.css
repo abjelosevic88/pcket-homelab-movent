@@ -270,6 +270,13 @@ input.bare, textarea.bare { border-color: transparent; background: transparent; 
 .segmented button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--hairline); }
 [data-theme="dark"] .segmented button.active { background: var(--surface-3); }
 .segmented.sm button { height: 24px; padding: 0 9px; font-size: 12.5px; }
+.segmented button[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.segmented button[aria-disabled="true"]:hover { color: var(--muted); }
+/* a choice that only works through Pocket Core, on a server without one */
+.core-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.core-hint a { color: inherit; text-decoration: underline; }
+fieldset.core-off { border: 0; margin: 0; padding: 0; min-width: 0; }
+fieldset.core-off:disabled { opacity: .5; cursor: not-allowed; }
 
 /* chips, badges, callouts */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }

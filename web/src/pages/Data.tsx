@@ -8,7 +8,7 @@ import { useApp } from '../lib/app-context'
 import { agoTs, fmtDateTs, fmtStamp, todayIn, addDaysISO } from '../lib/geo'
 import type { DawarichLink, Import } from '../lib/types'
 import { Icon } from '../components/icons'
-import { Card, Confirm, Field, Loading, Modal, PageHeader, Segmented, Switch, errMsg, useAsync, useToast } from '../components/ui'
+import { Card, Confirm, Field, Loading, Modal, NeedsCore, PageHeader, Segmented, Switch, errMsg, useAsync, useToast } from '../components/ui'
 import '../styles/manage.css'
 
 const FORMATS: [string, string][] = [
@@ -118,6 +118,7 @@ interface LinkRes { link: DawarichLink | null; every_minutes: number; core?: { c
 // copy everything once.
 function DawarichCard({ copied, onDone }: { copied: boolean; onDone: () => void }) {
   const { toast } = useToast()
+  const { boot } = useApp()
   const { data, reload } = useAsync(() => api.get<LinkRes>(`${V1}/dawarich-link`), [])
   const [f, setF] = useState({ url: '', api_key: '' })
   const [via, setVia] = useState<'core' | 'direct' | null>(null)
@@ -131,8 +132,10 @@ function DawarichCard({ copied, onDone }: { copied: boolean; onDone: () => void 
     try { await fn(); toast(ok); reload(); onDone(); return true } catch (e) { toast(errMsg(e), 'err'); return false } finally { setBusy(false) }
   }
   const core = data?.core
+  // Core counts once it is set up and this server is registered with it.
+  const coreOn = !!core?.configured && boot?.core?.registered !== false
   // Through Core when this server has Core, unless the person picked otherwise.
-  const mode = via ?? (core?.configured ? 'core' : 'direct')
+  const mode = coreOn ? (via ?? 'core') : 'direct'
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const body = mode === 'core' ? { source: 'core' } : { ...f, source: 'direct' }
@@ -160,6 +163,7 @@ function DawarichCard({ copied, onDone }: { copied: boolean; onDone: () => void 
             {l.cursor_ts > 0 && <span>up to {fmtStamp(l.cursor_ts)}</span>}
           </div>
           {l.last_error && <div className="callout danger"><Icon name="alert" size={14} /><span>{l.last_error}</span></div>}
+          {l.source === 'core' && !coreOn && <NeedsCore what="This link goes through Pocket Core, which this server is not connected to, so nothing is pulled. Unlink and enter Dawarich manually, or connect Core." />}
           <div className="row">
             <button type="button" className="btn" disabled={busy || !l.enabled} onClick={syncNow}><Icon name="refresh" size={15} />Pull now</button>
             <button type="button" className="btn ghost" disabled={busy} onClick={() => setUnlink(true)}><Icon name="x" size={15} />Unlink</button>
@@ -174,7 +178,10 @@ function DawarichCard({ copied, onDone }: { copied: boolean; onDone: () => void 
   return (
     <Card title="Dawarich" sub="Link a Dawarich server: your history comes across through its API (areas become saved places, confirmed visits keep their names) and new points keep coming. Dawarich itself is not changed.">
       <form onSubmit={submit} className="stack">
-        {core?.configured && <Field group label="Connect"><Segmented value={mode} onChange={setVia} options={[{ value: 'core', label: 'Through Pocket Core' }, { value: 'direct', label: 'Enter manually' }]} /></Field>}
+        <Field group label="Connect">
+          <Segmented value={mode} onChange={setVia} options={[{ value: 'core', label: 'Through Pocket Core', disabled: !coreOn }, { value: 'direct', label: 'Enter manually' }]} />
+          {!coreOn && <NeedsCore />}
+        </Field>
         {mode === 'core' ? (
           core?.available
             ? <div className="callout"><Icon name="link" size={14} /><span>Uses the Dawarich Pocket Core has for you: <b>{core.url}</b>. No key is kept here.</span></div>
