@@ -15,6 +15,10 @@ export const TILES: Record<string, { label: string; url: string; attr: string; o
   hot: { label: 'OSM Humanitarian (clean, good labels)', url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', attr: OSM_ATTR + ', style <a href="https://www.hotosm.org/">HOT</a>' },
   cyclosm: { label: 'CyclOSM (paths, trails, terrain)', url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', attr: OSM_ATTR + ', <a href="https://www.cyclosm.org/">CyclOSM</a>' },
   topo: { label: 'OpenTopoMap (hiking)', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr: OSM_ATTR + ', <a href="https://opentopomap.org">OpenTopoMap</a>', maxZoom: 17 },
+  'carto-light': { label: 'Light (CARTO Positron)', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attr: OSM_ATTR + ', &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 20 },
+  'carto-voyager': { label: 'Voyager (CARTO, soft colours)', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', attr: OSM_ATTR + ', &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 20 },
+  'carto-dark': { label: 'Dark (CARTO Dark Matter)', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attr: OSM_ATTR + ', &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 20, dark: true },
+  'esri-topo': { label: 'Esri World Topo', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', attr: ESRI_ATTR },
   'esri-streets': { label: 'Esri World Street', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', attr: ESRI_ATTR },
   'esri-satellite': { label: 'Esri Satellite (with labels)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr: ESRI_ATTR + ', Maxar, Earthstar Geographics', overlay: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', dark: true },
 }
@@ -351,4 +355,14 @@ function drawFog(m: L.Map, c: HTMLCanvasElement, p: MoveMapProps) {
     ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2); ctx.fill()
   }
   ctx.globalCompositeOperation = 'source-over'
+}
+
+/** One tile of a style, for a preview: the tile holding lat/lng at zoom z. */
+export function tilePreview(key: string, lat: number, lng: number, z = 13): string {
+  const t = TILES[key] || TILES.osm
+  const n = 2 ** z
+  const x = Math.floor(((lng + 180) / 360) * n)
+  const r = (lat * Math.PI) / 180
+  const y = Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n)
+  return t.url.replace('{s}', 'a').replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y)).replace('{r}', '')
 }

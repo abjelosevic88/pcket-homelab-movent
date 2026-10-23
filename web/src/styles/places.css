@@ -12,7 +12,7 @@
 .pl-split { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(320px, 1.1fr); gap: 16px; align-items: start; }
 .pl-map-col { position: sticky; top: 12px; height: calc(100vh - var(--topbar-h) - 180px); min-height: 360px; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); }
 .pl-map-col .mm { height: 100%; }
-.pl-map-hint { position: absolute; left: 10px; bottom: 8px; z-index: 500; background: var(--surface); padding: 3px 8px; border-radius: 6px; box-shadow: var(--shadow-sm); pointer-events: none; }
+.pl-map-hint { position: absolute; left: 10px; bottom: 8px; z-index: 5; background: var(--surface); padding: 3px 8px; border-radius: 6px; box-shadow: var(--shadow-sm); pointer-events: none; }
 
 .pl-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
 .pl-list li + li { border-top: 1px solid var(--hairline); }
@@ -37,7 +37,7 @@
 .pl-ed-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; }
 .pl-ed-map { position: relative; height: 330px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
 .pl-ed-map .mm { height: 100%; cursor: crosshair; }
-.pl-ed-hint { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 500; display: flex; align-items: center; gap: 6px; background: var(--surface); padding: 6px 11px; border-radius: 999px; box-shadow: var(--shadow); font-size: 12.5px; pointer-events: none; }
+.pl-ed-hint { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 6px; background: var(--surface); padding: 6px 11px; border-radius: 999px; box-shadow: var(--shadow); font-size: 12.5px; pointer-events: none; }
 .pl-hits { border: 1px solid var(--border); border-radius: 10px; background: var(--raised); box-shadow: var(--shadow); overflow: hidden; }
 .pl-hit { display: flex; align-items: flex-start; gap: 9px; width: 100%; padding: 8px 11px; border: 0; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
 .pl-hit + .pl-hit { border-top: 1px solid var(--hairline); }

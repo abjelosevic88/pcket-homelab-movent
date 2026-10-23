@@ -1,12 +1,12 @@
 // Import & export: files from Google Takeout, GPX, KML, GeoJSON, OwnTracks,
-// CSV (or a ZIP of them), a pull from another Dawarich server, exports of any
+// CSV (or a ZIP of them), a link to (or one-off pull from) a Dawarich server, exports of any
 // range, and the dangerous bits (delete a range, rebuild everything).
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import { fmtDateTs, fmtStamp, todayIn, addDaysISO } from '../lib/geo'
-import type { Import } from '../lib/types'
+import { agoTs, fmtDateTs, fmtStamp, todayIn, addDaysISO } from '../lib/geo'
+import type { DawarichLink, Import } from '../lib/types'
 import { Icon } from '../components/icons'
 import { Card, Confirm, Field, Loading, Modal, PageHeader, Segmented, Switch, errMsg, useAsync, useToast } from '../components/ui'
 import '../styles/manage.css'
@@ -46,7 +46,7 @@ export default function Data() {
       <PageHeader title="Import & export" sub="Bring your history in from Google, Dawarich or any GPS file, and take it out again whenever you like." />
       <div className="mg-two">
         <Upload onDone={reload} />
-        <DawarichImport onDone={reload} />
+        <DawarichCard copied={!!data?.imports.some(i => i.format === 'dawarich' && i.status === 'done')} onDone={reload} />
       </div>
       <Imports list={data?.imports} formats={data?.formats || {}} reload={reload} />
       <Export />
@@ -112,21 +112,81 @@ function Upload({ onDone }: { onDone: () => void }) {
   )
 }
 
-function DawarichImport({ onDone }: { onDone: () => void }) {
+interface LinkRes { link: DawarichLink | null; every_minutes: number; core?: { configured: boolean; available?: boolean; url?: string; error?: string } }
+
+// Dawarich: link it (new points keep coming over every few minutes) and/or
+// copy everything once.
+function DawarichCard({ copied, onDone }: { copied: boolean; onDone: () => void }) {
   const { toast } = useToast()
+  const { data, reload } = useAsync(() => api.get<LinkRes>(`${V1}/dawarich-link`), [])
   const [f, setF] = useState({ url: '', api_key: '' })
+  const [via, setVia] = useState<'core' | 'direct' | null>(null)
+  const [keep, setKeep] = useState(true)
+  const [copy, setCopy] = useState(!copied)
   const [busy, setBusy] = useState(false)
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault(); setBusy(true)
-    try { await api.post(`${V1}/imports/dawarich`, f); toast('Copying from Dawarich — it runs in the background'); setF({ url: f.url, api_key: '' }); onDone() } catch (e) { toast(errMsg(e), 'err') } finally { setBusy(false) }
+  const [unlink, setUnlink] = useState(false)
+  useEffect(() => { setCopy(!copied) }, [copied])
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
+    setBusy(true)
+    try { await fn(); toast(ok); reload(); onDone(); return true } catch (e) { toast(errMsg(e), 'err'); return false } finally { setBusy(false) }
+  }
+  const core = data?.core
+  // Through Core when this server has Core, unless the person picked otherwise.
+  const mode = via ?? (core?.configured ? 'core' : 'direct')
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const body = mode === 'core' ? { source: 'core' } : { ...f, source: 'direct' }
+    if (!keep) return run(() => api.post(`${V1}/imports/dawarich`, body), 'Copying from Dawarich — it runs in the background').then(ok => { if (ok) setF({ url: f.url, api_key: '' }) })
+    return run(() => api.put(`${V1}/dawarich-link`, { ...body, copy_history: copy }), copy ? 'Linked — copying history in the background' : 'Linked to Dawarich')
+  }
+  const syncNow = () => run(async () => { await api.post(`${V1}/dawarich-link/sync`); setTimeout(reload, 4000) }, 'Pulling from Dawarich')
+  if (!data) return <Card title="Dawarich"><Loading /></Card>
+  const l = data.link
+  if (l) {
+    let host = l.url
+    try { host = new URL(l.url).host } catch { /* keep as is */ }
+    return (
+      <Card title="Linked to Dawarich" sub={`New points on ${host} come over every ${data.every_minutes} minutes, so your phone can keep reporting to Dawarich. Dawarich itself is not changed.`}
+        actions={<Switch checked={l.enabled} label="Keep pulling" disabled={busy} onChange={v => run(() => api.patch(`${V1}/dawarich-link`, { enabled: v }), v ? 'Link resumed' : 'Link paused')} />}>
+        <div className="stack">
+          <div className="imp-meta">
+            <span><Icon name="link" size={13} /> {l.account || host}</span>
+            <span className="muted small">{l.source === 'core' ? 'through Pocket Core' : 'entered by hand'}</span>
+            <span className={`badge ${!l.enabled ? '' : l.last_error ? 'danger' : 'ok'}`}>{!l.enabled ? 'paused' : l.last_error ? 'failing' : 'linked'}</span>
+          </div>
+          <div className="imp-meta">
+            <span>{l.last_sync_at ? <>last pulled <span title={fmtStamp(l.last_sync_at)}>{agoTs(l.last_sync_at)}</span> · {l.last_added.toLocaleString()} new</> : 'waiting for the first pull'}</span>
+            {l.points_added > 0 && <span className="tnum">{l.points_added.toLocaleString()} points since {fmtDateTs(l.created_at)}</span>}
+            {l.cursor_ts > 0 && <span>up to {fmtStamp(l.cursor_ts)}</span>}
+          </div>
+          {l.last_error && <div className="callout danger"><Icon name="alert" size={14} /><span>{l.last_error}</span></div>}
+          <div className="row">
+            <button type="button" className="btn" disabled={busy || !l.enabled} onClick={syncNow}><Icon name="refresh" size={15} />Pull now</button>
+            <button type="button" className="btn ghost" disabled={busy} onClick={() => setUnlink(true)}><Icon name="x" size={15} />Unlink</button>
+          </div>
+          <p className="mg-hint">{l.source === 'core' ? 'The address and key come from Pocket Core on every pull, so a change there applies here too.' : 'To change the address or key, unlink and link again.'} Points already here are skipped, so nothing is doubled.</p>
+        </div>
+        {unlink && <Confirm title="Unlink Dawarich?" confirmLabel="Unlink" message="New points there stop coming over. Everything already copied stays here."
+          onCancel={() => setUnlink(false)} onConfirm={() => { setUnlink(false); run(() => api.del(`${V1}/dawarich-link`), 'Unlinked') }} />}
+      </Card>
+    )
   }
   return (
-    <Card title="Move over from Dawarich" sub="Copies everything through Dawarich’s API: areas become saved places, confirmed visits keep their names, and every point comes across. Dawarich itself is not changed.">
+    <Card title="Dawarich" sub="Link a Dawarich server: your history comes across through its API (areas become saved places, confirmed visits keep their names) and new points keep coming. Dawarich itself is not changed.">
       <form onSubmit={submit} className="stack">
-        <Field label="Dawarich address" help="e.g. https://dawarich.example.com or http://dawarich:3000"><input type="url" value={f.url} onChange={e => setF({ ...f, url: e.target.value })} required placeholder="https://" /></Field>
-        <Field label="API key" help="In Dawarich: Account → API key."><input value={f.api_key} onChange={e => setF({ ...f, api_key: e.target.value })} required autoComplete="off" spellCheck={false} /></Field>
-        <div className="row"><button className="btn primary" disabled={busy}><Icon name="download" size={15} />{busy ? 'Checking…' : 'Start copying'}</button></div>
-        <p className="mg-hint">Running it again later only adds what is new: points already here are skipped.</p>
+        {core?.configured && <Field group label="Connect"><Segmented value={mode} onChange={setVia} options={[{ value: 'core', label: 'Through Pocket Core' }, { value: 'direct', label: 'Enter manually' }]} /></Field>}
+        {mode === 'core' ? (
+          core?.available
+            ? <div className="callout"><Icon name="link" size={14} /><span>Uses the Dawarich Pocket Core has for you: <b>{core.url}</b>. No key is kept here.</span></div>
+            : <div className="callout danger"><Icon name="alert" size={14} /><span>{core?.error || 'Pocket Core has no Dawarich for you.'} Add Dawarich in Pocket Core (Services), or enter it manually.</span></div>
+        ) : <>
+          <Field label="Dawarich address" help="e.g. https://dawarich.example.com or http://dawarich:3000"><input type="url" value={f.url} onChange={e => setF({ ...f, url: e.target.value })} required placeholder="https://" /></Field>
+          <Field label="API key" help="In Dawarich: Account → API key."><input value={f.api_key} onChange={e => setF({ ...f, api_key: e.target.value })} required autoComplete="off" spellCheck={false} /></Field>
+        </>}
+        <label className="row"><Switch checked={keep} onChange={setKeep} label="Keep in sync" size="sm" /><span className="grow">Keep in sync <span className="muted small">— pull new points every few minutes</span></span></label>
+        {keep && <label className="row"><Switch checked={copy} onChange={setCopy} label="Copy all history first" size="sm" /><span className="grow">Copy all history first{copied && <span className="muted small"> — already copied once</span>}</span></label>}
+        <div className="row"><button className="btn primary" disabled={busy || (mode === 'core' && !core?.available)}><Icon name={keep ? 'link' : 'download'} size={15} />{busy ? 'Checking…' : keep ? 'Link Dawarich' : 'Copy once'}</button></div>
+        <p className="mg-hint">Points already here are skipped, so linking after a copy (or copying twice) never doubles anything.</p>
       </form>
     </Card>
   )
