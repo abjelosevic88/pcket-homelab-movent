@@ -128,7 +128,9 @@ func clampI(v, lo, hi int) int {
 // 2: walking loops are no visits, walk/drive splits, stays over a long
 // silence elsewhere end within 12 h. 3: transport modes follow the person's
 // settings (modes turned off hand their journeys to the nearest one in use).
-const analysisVersion = "3"
+// 4: flights are journeys (tracked in the air or with the phone off), and
+// countries under the plane are not visited.
+const analysisVersion = "4"
 
 func (s *Server) rebuildIfAnalysisChanged(ctx context.Context) {
 	if s.store.BoxValue(ctx, "analysis_version") == analysisVersion {

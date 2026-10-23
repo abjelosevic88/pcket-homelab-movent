@@ -333,7 +333,10 @@ func (e *Engine) Summarize(ctx context.Context, userID, from, to int64, loc *tim
 			a.day.FirstTS = p.TS
 		}
 		a.day.LastTS = p.TS
-		if c := geo.CountryAt(p.Lat, p.Lng); c != "" && !a.seenC[c] {
+		tk := trackAt(p.TS)
+		// Flying over a country is not being there: only a flight's ends count.
+		inAir := tk >= 0 && tracks[tk].Mode == "flying" && p.TS > tracks[tk].StartTS && p.TS < tracks[tk].EndTS
+		if c := geo.CountryAt(p.Lat, p.Lng); c != "" && !a.seenC[c] && !inAir {
 			a.seenC[c] = true
 			a.day.Countries = append(a.day.Countries, c)
 		}
@@ -342,7 +345,6 @@ func (e *Engine) Summarize(ctx context.Context, userID, from, to int64, loc *tim
 				a.day.MaxFromHome = d
 			}
 		}
-		tk := trackAt(p.TS)
 		if prev != nil && tk >= 0 && tk == prevTrack {
 			d := geo.Haversine(prev.Lat, prev.Lng, p.Lat, p.Lng)
 			a.day.Distance += d

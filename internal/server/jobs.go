@@ -195,7 +195,9 @@ func (s *Server) onLivePoint(ctx context.Context, u *store.User, p store.Point) 
 		_ = s.store.SetState(ctx, u.ID, "stale", "0")
 		s.event(ctx, u.ID, "movement.tracking_resumed", "tracking:"+strconv.FormatInt(u.ID, 10), map[string]any{"title": "Location tracking is back", "path": "/"})
 	}
-	if p.Country == "" {
+	// No country from the air: the welcome comes on landing.
+	airborne := (p.Speed != nil && *p.Speed > 70) || (p.Altitude != nil && *p.Altitude > 5000)
+	if p.Country == "" || airborne {
 		return
 	}
 	prev := s.store.GetState(ctx, u.ID, "country")

@@ -181,3 +181,56 @@ func TestSparseDayDistance(t *testing.T) {
 		t.Fatalf("days = %+v", days)
 	}
 }
+
+// Sarajevo → Vienna with the phone tracking in the air: the day lists the
+// countries at either end, not the ones under the plane.
+func TestFlightCountries(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	u := &store.User{Email: "a@b.c", Name: "A", Role: "admin"}
+	if err := st.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	loc, _ := time.LoadLocation("Europe/Sarajevo")
+	t0 := time.Date(2026, 10, 20, 9, 0, 0, 0, loc)
+	sjj, vie := [2]float64{43.82, 18.33}, [2]float64{48.11, 16.57}
+	var pts []store.Point
+	add := func(ts time.Time, lat, lng float64, speed float64) {
+		a, s := 15.0, speed
+		pts = append(pts, store.Point{UserID: u.ID, TS: ts.Unix(), Lat: lat, Lng: lng, Accuracy: &a, Speed: &s, Country: geo.CountryAt(lat, lng), Source: "test"})
+	}
+	for m := 0; m < 60; m += 2 {
+		add(t0.Add(time.Duration(m)*time.Minute), sjj[0], sjj[1], 0)
+	}
+	dep := t0.Add(time.Hour)
+	for k := 1; k < 50; k++ {
+		lat, lng := lerp(sjj, vie, float64(k)/50)
+		add(dep.Add(time.Duration(k)*time.Minute), lat, lng, 165)
+	}
+	for m := 0; m < 60; m += 2 {
+		add(dep.Add(time.Duration(50+m)*time.Minute), vie[0], vie[1], 0)
+	}
+	res, err := st.InsertPoints(ctx, u.ID, pts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &Engine{Store: st, DefaultTZ: loc}
+	if _, err := e.Rebuild(ctx, u.ID, res.MinTS, res.MaxTS); err != nil {
+		t.Fatal(err)
+	}
+	tracks, _ := st.Tracks(ctx, u.ID, 0, 0, true)
+	if len(tracks) != 1 || tracks[0].Mode != "flying" {
+		t.Fatalf("tracks: %+v", tracks)
+	}
+	var countries string
+	if err := st.DB.QueryRowContext(ctx, `SELECT countries FROM days WHERE user_id = ? AND date = '2026-10-20'`, u.ID).Scan(&countries); err != nil {
+		t.Fatal(err)
+	}
+	if countries != "BA,AT" {
+		t.Fatalf("countries = %q, want BA,AT", countries)
+	}
+}
