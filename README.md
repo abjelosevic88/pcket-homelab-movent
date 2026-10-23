@@ -9,6 +9,40 @@
 
 ---
 
+<p align="center"><img src="docs/screenshots/desktop-timeline.png" width="900" alt="A day in the timeline: a train trip from Vienna to Bratislava and back, with the visits and walks in between and the route on the map"></p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/desktop-map-trip.png" alt="The map for a four-day road trip from Sarajevo to Dubrovnik, with distance per day"></td>
+    <td width="50%"><img src="docs/screenshots/desktop-insights.png" alt="Insights: distance by month and by transport mode, where the time went, and the average day of the week"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Any day or range on the map, with distance per day and the countries crossed.</sub></td>
+    <td align="center"><sub>Distance by month and mode, where the time went and the busiest weekdays.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/desktop-countries.png" alt="The scratch map with the countries visited shaded, and the list of countries and cities"></td>
+    <td width="50%"><img src="docs/screenshots/desktop-places.png" alt="Saved places with their visits, time spent and last visit, and a map of all of them"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>A scratch map of the countries you have been to, worked out offline.</sub></td>
+    <td align="center"><sub>Saved places name and confirm every visit inside them, past ones too.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/desktop-device-setup.png" alt="Setting up OwnTracks on an iPhone with a QR code"></td>
+    <td width="50%"><img src="docs/screenshots/desktop-timeline-dark.png" alt="The timeline of a driving day in dark mode"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Each phone gets its own key; OwnTracks and Overland set themselves up from a QR code.</sub></td>
+    <td align="center"><sub>Dark mode.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/screenshots/phone-timeline.png" width="240" alt="The timeline on a phone">&nbsp;&nbsp;
+  <img src="docs/screenshots/phone-map.png" width="240" alt="The map on a phone, showing a boat trip across a bay">
+</p>
+
 ## What it does
 
 **Records from the apps you already have**
