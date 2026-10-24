@@ -275,6 +275,11 @@ func (s *Server) Router() http.Handler {
 			r.Patch("/journeys/{id}", s.handleUpdateTrack)
 			r.Get("/journeys/{id}/points", s.handleTrackPoints)
 
+			r.Get("/workouts", s.handleListWorkouts)
+			r.Get("/workouts/{id}/points", s.handleWorkoutPoints)
+			r.Get("/health/status", s.handleHealthStatus)
+			r.Post("/health/status", s.handleHealthStatus)
+
 			r.Get("/devices", s.handleListDevices)
 			r.Post("/devices", s.handleCreateDevice)
 			r.Get("/devices/{id}", s.handleGetDevice)

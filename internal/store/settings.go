@@ -32,6 +32,11 @@ type Settings struct {
 	// Notifications through Pocket Core.
 	NotifyStaleHours int  `json:"notify_stale_hours"` // no position for this long → event; 0 = never
 	NotifyCountries  bool `json:"notify_countries"`
+	// Pocket Health (workouts): "core" (an app link through Pocket Core), "direct" (URL + token) or "off"; "" = not chosen.
+	HealthMode      string `json:"health_mode"`
+	HealthURL       string `json:"health_url"`
+	HealthToken     string `json:"health_token"`
+	HealthPublicURL string `json:"health_public_url"`
 }
 
 // ModeSpeeds (km/h) sort a journey into a transport mode. "Top" is the speed

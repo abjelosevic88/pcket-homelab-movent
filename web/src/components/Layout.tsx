@@ -15,6 +15,7 @@ const SIDEBAR_KEY = 'pm-sidebar'
 export const NAV = [
   { to: '/', label: 'Map', icon: 'map', end: true, key: 'm' },
   { to: '/timeline', label: 'Timeline', icon: 'activity', key: 't' },
+  { to: '/workouts', label: 'Workouts', icon: 'run', key: 'w' },
   { to: '/insights', label: 'Insights', icon: 'chart', key: 'i' },
   { to: '/places', label: 'Places', icon: 'pin', key: 'p' },
   { to: '/family', label: 'Family & sharing', icon: 'users', key: 'f' },

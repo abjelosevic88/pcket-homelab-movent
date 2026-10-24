@@ -15,12 +15,13 @@ import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { AskButton } from '../components/AskButton'
 import '../styles/manage.css'
 
-type TabId = 'general' | 'detection' | 'notifications' | 'privacy' | 'profile' | 'users' | 'api' | 'about'
+type TabId = 'apps' | 'general' | 'detection' | 'notifications' | 'privacy' | 'profile' | 'users' | 'api' | 'about'
 
 const TABS: { id: TabId; label: string; icon: string; sub: string }[] = [
   { id: 'general', label: 'General', icon: 'settings', sub: 'Units, time zone, map tiles, route colours and the look.' },
   { id: 'detection', label: 'Detection', icon: 'route', sub: 'How positions become visits and journeys.' },
   { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'What Pocket Movement tells you about, through Pocket Core.' },
+  { id: 'apps', label: 'Connected apps', icon: 'layers', sub: 'Pocket Health — your workouts on the map — through Pocket Core or directly.' },
   { id: 'privacy', label: 'Privacy zones', icon: 'lock', sub: 'Circles kept out of shared views and exports — or never recorded at all.' },
   { id: 'profile', label: 'Profile', icon: 'user', sub: 'Your name, email and password.' },
   { id: 'users', label: 'People', icon: 'users', sub: 'Everyone who has an account on this box.' },
@@ -78,6 +79,7 @@ export default function Settings() {
             {tab === 'general' && <General />}
             {tab === 'detection' && <Detection />}
             {tab === 'notifications' && <Notifications />}
+            {tab === 'apps' && <ConnectedApps />}
             {tab === 'privacy' && <PrivacyZones />}
             {tab === 'profile' && <Profile />}
             {tab === 'users' && <Users />}
@@ -136,6 +138,54 @@ function NumInput({ value, onChange, unit, min, max, step = 1 }: { value: number
 
 function SaveRow({ busy, onSave, children }: { busy: boolean; onSave: () => void; children?: React.ReactNode }) {
   return <div className="row">{children}<span className="grow" /><button type="button" className="btn primary" disabled={busy} onClick={onSave}>{busy ? 'Saving…' : 'Save changes'}</button></div>
+}
+
+// ---------- connected apps ----------
+
+function ConnectedApps() {
+  const { f, setF, save, busy } = useAccountSettings()
+  const { boot } = useApp()
+  const { toast } = useToast()
+  const [status, setStatus] = useState<{ mode: string; connected: boolean; via?: string; detail?: string; message?: string } | null>(null)
+  const [advanced, setAdvanced] = useState(false)
+  const load = () => api.get<typeof status>(`${V1}/health/status`).then(setStatus).catch(() => {})
+  useEffect(() => { load() }, [])
+  useEffect(() => { if (f?.health_mode === 'direct') setAdvanced(true) }, [f?.health_mode])
+  if (!f) return <Loading />
+  const coreOn = !!boot?.core?.configured && boot?.core?.registered !== false
+  const effective = f.health_mode || (f.health_token ? 'direct' : coreOn ? 'core' : 'direct')
+  const mode = !coreOn && effective === 'core' ? 'off' : effective
+  const showDirect = !coreOn || mode === 'direct' || advanced
+  const test = async () => { try { const r = await api.post<NonNullable<typeof status>>(`${V1}/health/status`); setStatus(r); toast(r.connected ? r.message || 'Connected' : r.detail || 'Not connected', r.connected ? 'ok' : 'err') } catch (e) { toast(errMsg(e), 'err') } }
+  const setMode = async (m: string) => { setF({ ...f, health_mode: m as SettingsT['health_mode'] }); await save({ health_mode: m as SettingsT['health_mode'] }); load() }
+  return (
+    <div className="stack loose">
+      <div className="callout info"><Icon name="info" size={15} /><div>These connections are yours. Through <b>Pocket Core</b> Movement acts as you in your own Pocket Health with nothing to paste (switch it off for yourself in Pocket Core → Settings → Apps acting for me); <b>Direct</b> uses an address and an API token you enter.{!coreOn && <NeedsCore />}</div></div>
+      <Section title="Pocket Health — your workouts" icon="run" actions={<span className={`badge ${mode === 'off' ? '' : status?.connected ? 'ok' : 'warn'}`}>{mode === 'off' ? 'off' : status?.connected ? (status.via === 'core' ? 'Pocket Core' : 'direct') : 'not connected'}</span>}
+        sub="Every workout Pocket Health knows (from your watch and phone) appears under Workouts, drawn from the positions recorded here while it ran.">
+        <div className="conn-block">
+          <div className="conn-mode">
+            <Segmented size="sm" value={mode} onChange={setMode} options={[
+              { value: 'core', label: 'Pocket Core', title: coreOn ? 'Through Pocket Core: per person, nothing to paste' : 'Needs Pocket Core: there is none on this server', disabled: !coreOn },
+              ...(showDirect ? [{ value: 'direct', label: 'Direct', title: 'Your own address and API token' }] : []),
+              { value: 'off', label: 'Off' },
+            ]} />
+            {!showDirect && <button type="button" className="link-btn small" onClick={() => setAdvanced(true)}>Advanced: connect directly with an address and token</button>}
+          </div>
+          <p className={`small ${mode === 'off' ? 'muted' : status?.connected ? 'ok' : 'bad'}`}>{mode === 'off' ? 'Off: Movement does not talk to Pocket Health.' : status?.connected ? (status.via === 'core' ? 'Connected through Pocket Core, as you.' : 'Direct connection with your own address and token.') : `Not connected: ${status?.detail || '…'}`}</p>
+          {mode === 'direct' && <div className="two-col tight">
+            <Field label="Address" help="Inside Docker use http://host.docker.internal:PORT or the service name."><input value={f.health_url} onChange={e => setF({ ...f, health_url: e.target.value })} placeholder="http://host.docker.internal:8199" /></Field>
+            <Field label="API token" help="Pocket Health → Settings → API & shortcuts"><input value={f.health_token} onChange={e => setF({ ...f, health_token: e.target.value })} autoComplete="off" /></Field>
+          </div>}
+          <div className="row wrap">
+            {mode === 'direct' && <button type="button" className="btn primary sm" disabled={busy} onClick={async () => { await save(); load() }}>Save</button>}
+            {mode !== 'off' && <button type="button" className="btn sm" onClick={test}>Test connection</button>}
+            {mode === 'direct' && !!f.health_token && <button type="button" className="btn sm ghost danger-text" onClick={async () => { await save({ health_url: '', health_token: '' }); load() }}>Disconnect</button>}
+          </div>
+        </div>
+      </Section>
+    </div>
+  )
 }
 
 // ---------- general ----------

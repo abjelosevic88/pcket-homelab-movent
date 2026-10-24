@@ -55,6 +55,7 @@
 - Works with sparse data: phones in "significant change" mode report almost nothing while still, and an overnight silence at home is still a night at home.
 - GPS **spikes** are left out of routes and totals (kept, not deleted); a flight with the phone off is not mistaken for one.
 - **Places**: save home, work or the gym with a radius and every visit inside is named and confirmed — back in time too. Other places are named by OpenStreetMap; rename one and all its visits follow. Merge duplicates.
+- **Workouts** from Pocket Health (your watch and phone send them there): every run, walk, ride or hike in a list by day, drawn on the map from the positions recorded here while it ran, with the recorded distance — through a Pocket Core link or a direct connection.
 - **Countries offline**: borders are built in (Natural Earth), so countries need no geocoder and no network.
 
 **Shows and reports it**
