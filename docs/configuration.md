@@ -40,7 +40,7 @@ Changing any of them, or your time zone, rebuilds your whole history in the back
 
 ## Pocket Core
 
-With `CORE_URL`, Movement registers as `movement`, offers `movement:read` (timeline, summaries, reports) and `movement:points` (raw points, the Dawarich API) to other Pocket apps through app links, uses Pocket Health (`health:read`, the Workouts page; or `HEALTH_URL`-less direct URL + token under Settings → Connected apps), and publishes:
+With `CORE_URL`, Movement registers as `movement`, offers `movement:read` (timeline, summaries, reports) and `movement:points` (raw points, the Dawarich API) to other Pocket apps through app links, uses Pocket Health (`health:read`) for the Workouts page — or a direct URL and token under Settings → Connected apps — and publishes:
 
 | Topic | When | Payload (never coordinates) |
 |---|---|---|
