@@ -12,6 +12,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './pages/Login'
 import MapPage from './pages/MapPage'
 import Timeline from './pages/Timeline'
+import Workouts from './pages/Workouts'
 import Insights from './pages/Insights'
 import Places from './pages/Places'
 import PlaceDetail from './pages/PlaceDetail'
@@ -42,6 +43,7 @@ function App() {
         <Route path="/" element={<MapPage />} />
         <Route path="/timeline" element={<Timeline />} />
         <Route path="/timeline/:date" element={<Timeline />} />
+        <Route path="/workouts" element={<Workouts />} />
         <Route path="/insights" element={<Insights />} />
         <Route path="/insights/:tab" element={<Insights />} />
         <Route path="/places" element={<Places />} />

@@ -108,6 +108,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "MOVEMENT",
 		Publishes: publishes,
 		Offers:    linkOffers,
+		Uses:      healthUses(),
 		Services:  serviceUses,
 	}
 	if s.cfg.BaseURL != "" {

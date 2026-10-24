@@ -19,6 +19,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := userFrom(ctx)
 	st, loc := s.userLoc(ctx, u.ID)
+	st.HealthToken = maskToken(st.HealthToken)
 	writeJSON(w, http.StatusOK, map[string]any{"settings": st, "effective_timezone": loc.String(), "server_timezone": time.Local.String(), "is_admin": u.Role == "admin"})
 }
 
@@ -58,6 +59,17 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	st.ModesOff = store.CleanModesOff(st.ModesOff)
 	st.ModeSpeeds = clampSpeeds(st.ModeSpeeds)
 	st.NotifyStaleHours = clampI(st.NotifyStaleHours, 0, 24*14)
+	if strings.Contains(st.HealthToken, "••") {
+		st.HealthToken = before.HealthToken // the masked value came back from the form
+	}
+	st.HealthToken = strings.TrimSpace(st.HealthToken)
+	st.HealthURL = strings.TrimRight(strings.TrimSpace(st.HealthURL), "/")
+	st.HealthPublicURL = strings.TrimRight(strings.TrimSpace(st.HealthPublicURL), "/")
+	switch st.HealthMode {
+	case modeCore, modeDirect, modeOff, "":
+	default:
+		st.HealthMode = ""
+	}
 	if err := s.store.SaveUserSettings(ctx, u.ID, st); err != nil {
 		s.fail(w, err, "save settings")
 		return
@@ -74,6 +86,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		s.rebuildAll(ctx, u.ID)
 	}
 	st, _ = s.store.GetSettings(ctx, u.ID)
+	st.HealthToken = maskToken(st.HealthToken)
 	writeJSON(w, http.StatusOK, map[string]any{"settings": st, "rebuilding": rebuild})
 }
 
@@ -279,4 +292,14 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/vnd.sqlite3")
 	w.Header().Set("Content-Disposition", `attachment; filename="pocket-movement-`+time.Now().Format("20060102-150405")+`.db"`)
 	http.ServeFile(w, r, dst)
+}
+
+func maskToken(t string) string {
+	if t == "" {
+		return ""
+	}
+	if len(t) <= 8 {
+		return "••••"
+	}
+	return t[:4] + "••••" + t[len(t)-4:]
 }

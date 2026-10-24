@@ -166,3 +166,9 @@
 .set-nav-item:nth-child(7) { animation-delay: .21s; } .set-nav-item:nth-child(8) { animation-delay: .235s; }
 .set-nav-item:nth-child(9) { animation-delay: .26s; } .set-nav-item:nth-child(n+10) { animation-delay: .285s; }
 .set-inner { animation: set-swap .26s var(--ease) both; }
+
+/* connection block (Pocket Core | Direct | Off), as in the other Pocket apps */
+.conn-block { display: grid; gap: 10px; }
+.conn-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ok { color: var(--success); } .bad { color: var(--danger); }
+.badge.ok { background: var(--success-soft); color: var(--success); } .badge.warn { background: var(--warning-soft); color: var(--warning); }

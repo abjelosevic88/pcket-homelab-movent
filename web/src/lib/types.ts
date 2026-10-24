@@ -7,6 +7,7 @@ export interface Settings {
   visit_radius: number; visit_min_minutes: number; track_gap_minutes: number; max_accuracy: number; max_speed_kmh: number
   modes_off: string[]; mode_speeds: ModeSpeeds
   notify_stale_hours: number; notify_countries: boolean
+  health_mode: 'core' | 'direct' | 'off' | ''; health_url: string; health_token: string; health_public_url: string
 }
 
 /** km/h. "Top" is what a journey stays under 85% of the time, "typical" its median. */
@@ -109,3 +110,10 @@ export interface Insights {
   }
   time_split: { home: number; work: number; elsewhere: number; moving: number; unknown: number }
 }
+
+/** A workout from Pocket Health with the route recorded here. */
+export interface Workout {
+  id: number; kind: string; name: string; start_ts: number; end_ts: number; duration_s: number; distance_m: number; energy_kcal: number; avg_hr: number; max_hr: number; elevation_m: number
+  polyline: string; route_distance: number; route_points: number; start: [number, number]; end: [number, number]
+}
+export interface WorkoutsView { connected: boolean; via?: string; detail?: string; open_url?: string; workouts: Workout[] }
