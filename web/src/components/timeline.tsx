@@ -6,7 +6,7 @@ import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { MODES, fmtClock, fmtDist, fmtDur, fmtSpeed, isoDateOf, modeOf, placeEmoji } from '../lib/geo'
 import type { Entry, Journey, Visit } from '../lib/types'
-import { type Purchase, fmtMoney, shopOf } from '../lib/purchases'
+import { type Purchase, fmtMoney, shopNamesVisit, shopOf } from '../lib/purchases'
 import { Icon } from './icons'
 import { Field, type Anchor, Menu, type MenuItem, Modal, errMsg, rectOf, useToast } from './ui'
 
@@ -35,7 +35,7 @@ function VisitRow({ v, sel, onSelect, onChanged, compact, readOnly, earlier, pai
   }
   const shop = paid?.length ? shopOf(paid[0]) : ''
   const items: MenuItem[] = [
-    ...(shop && !v.name ? [{ label: `Name it “${shop}” (from the receipt)`, icon: 'receipt', onSelect: () => set({ name: shop }, `Named ${shop}`) }] : []),
+    ...(shop && v.name !== shop && shopNamesVisit(v) ? [{ label: `Name it “${shop}” (from the receipt)`, icon: 'receipt', onSelect: () => set({ name: shop }, `Named ${shop}`) }] : []),
     { label: 'Rename or choose the place…', icon: 'edit', onSelect: () => setEdit(true) },
     ...(v.status !== 'confirmed' ? [{ label: 'Confirm', icon: 'check', onSelect: () => set({ status: 'confirmed' }, 'Confirmed') }] : []),
     ...(v.status !== 'declined' ? [{ label: 'Not a visit (decline)', icon: 'x', onSelect: () => set({ status: 'declined' }, 'Declined') }] : [{ label: 'Restore', icon: 'undo', onSelect: () => set({ status: 'suggested' }) }]),
@@ -48,11 +48,11 @@ function VisitRow({ v, sel, onSelect, onChanged, compact, readOnly, earlier, pai
       <div className="tl-rail"><span className="tl-dot visit" title={v.status === 'suggested' ? 'Suggested: confirm or decline it' : undefined}>{v.place ? placeEmoji(v.place.category) : '📍'}</span></div>
       <div className="tl-body">
         <div className="tl-title">
-          <span className="ellipsis">{v.name || (shop ? <span title="Named after the shop you paid at (Pocket Money)">{shop}</span> : <span className="muted">Unnamed place{v.place?.geocoded === 0 ? ' (naming…)' : ''}</span>)}</span>
+          <span className="ellipsis">{shop && shopNamesVisit(v) ? <span title={`Named after the shop you paid at (Pocket Money)${v.name ? ` · ${v.name}` : ''}`}>{shop}</span> : v.name || <span className="muted">Unnamed place{v.place?.geocoded === 0 ? ' (naming…)' : ''}</span>}</span>
           {v.status === 'suggested' && !compact && <span className="badge">suggested</span>}
           {v.status === 'declined' && <span className="badge muted">declined</span>}
         </div>
-        <div className="tl-sub">{fmtDur(dur)}{v.place?.city ? ` · ${v.place.city}` : ''}{v.place?.kind === 'saved' ? ' · saved place' : ''}{v.notes ? ` · ${v.notes}` : ''}</div>
+        <div className="tl-sub">{shop && shopNamesVisit(v) && v.name && v.name !== shop ? `${v.name} · ` : ''}{fmtDur(dur)}{v.place?.city ? ` · ${v.place.city}` : ''}{v.place?.kind === 'saved' ? ' · saved place' : ''}{v.notes ? ` · ${v.notes}` : ''}</div>
         {paid?.map(p => (
           <a key={p.id} className="tl-paid" href={p.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="Open in Pocket Money">
             <span>{p.category_icon || '🧾'}</span><span className="ellipsis">{shopOf(p)}</span><b>{fmtMoney(p.amount, p.currency)}</b><span className="muted">{p.time}</span>
