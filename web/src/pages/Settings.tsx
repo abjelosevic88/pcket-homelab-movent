@@ -21,7 +21,7 @@ const TABS: { id: TabId; label: string; icon: string; sub: string }[] = [
   { id: 'general', label: 'General', icon: 'settings', sub: 'Units, time zone, map tiles, route colours and the look.' },
   { id: 'detection', label: 'Detection', icon: 'route', sub: 'How positions become visits and journeys.' },
   { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'What Pocket Movement tells you about, through Pocket Core.' },
-  { id: 'apps', label: 'Connected apps', icon: 'layers', sub: 'Pocket Health — your workouts on the map — through Pocket Core or directly.' },
+  { id: 'apps', label: 'Connected apps', icon: 'layers', sub: 'Pocket Health (workouts) and Pocket Money (where you paid) on the map — through Pocket Core or directly.' },
   { id: 'privacy', label: 'Privacy zones', icon: 'lock', sub: 'Circles kept out of shared views and exports — or never recorded at all.' },
   { id: 'profile', label: 'Profile', icon: 'user', sub: 'Your name, email and password.' },
   { id: 'users', label: 'People', icon: 'users', sub: 'Everyone who has an account on this box.' },
@@ -143,48 +143,65 @@ function SaveRow({ busy, onSave, children }: { busy: boolean; onSave: () => void
 // ---------- connected apps ----------
 
 function ConnectedApps() {
+  const { f } = useAccountSettings()
+  const { boot } = useApp()
+  if (!f) return <Loading />
+  const coreOn = !!boot?.core?.configured && boot?.core?.registered !== false
+  return (
+    <div className="stack loose">
+      <div className="callout info"><Icon name="info" size={15} /><div>These connections are yours. Through <b>Pocket Core</b> Movement acts as you in your own Pocket apps with nothing to paste (switch it off for yourself in Pocket Core → Settings → Apps acting for me); <b>Direct</b> uses an address and an API token you enter.{!coreOn && <NeedsCore />}</div></div>
+      <AppConnection app="health" title="Pocket Health — your workouts" icon="run" placeholder="http://host.docker.internal:8199" tokenHelp="Pocket Health → Settings → API & shortcuts"
+        sub="Every workout Pocket Health knows (from your watch and phone) appears under Workouts, drawn from the positions recorded here while it ran." />
+      <AppConnection app="money" title="Pocket Money — where you paid" icon="receipt" placeholder="http://host.docker.internal:8178" tokenHelp="Pocket Money → Settings → API & apps"
+        sub="Purchases with a place (from scanned receipts) show on the map as “Where you paid”, and a visit you paid during is named after the shop." />
+    </div>
+  )
+}
+
+/** One connected Pocket app: through Pocket Core, directly, or off. */
+function AppConnection({ app, title, icon, sub, placeholder, tokenHelp }: { app: 'health' | 'money'; title: string; icon: string; sub: string; placeholder: string; tokenHelp: string }) {
   const { f, setF, save, busy } = useAccountSettings()
   const { boot } = useApp()
   const { toast } = useToast()
   const [status, setStatus] = useState<{ mode: string; connected: boolean; via?: string; detail?: string; message?: string } | null>(null)
   const [advanced, setAdvanced] = useState(false)
-  const load = () => api.get<typeof status>(`${V1}/health/status`).then(setStatus).catch(() => {})
-  useEffect(() => { load() }, [])
-  useEffect(() => { if (f?.health_mode === 'direct') setAdvanced(true) }, [f?.health_mode])
-  if (!f) return <Loading />
+  const k = { mode: `${app}_mode`, url: `${app}_url`, token: `${app}_token` } as const
+  const load = () => api.get<typeof status>(`${V1}/${app}/status`).then(setStatus).catch(() => {})
+  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const fv = f as unknown as Record<string, string> | null
+  useEffect(() => { if (fv?.[k.mode] === 'direct') setAdvanced(true) }, [fv?.[k.mode]]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!f || !fv) return null
   const coreOn = !!boot?.core?.configured && boot?.core?.registered !== false
-  const effective = f.health_mode || (f.health_token ? 'direct' : coreOn ? 'core' : 'direct')
+  const effective = fv[k.mode] || (fv[k.token] ? 'direct' : coreOn ? 'core' : 'direct')
   const mode = !coreOn && effective === 'core' ? 'off' : effective
   const showDirect = !coreOn || mode === 'direct' || advanced
-  const test = async () => { try { const r = await api.post<NonNullable<typeof status>>(`${V1}/health/status`); setStatus(r); toast(r.connected ? r.message || 'Connected' : r.detail || 'Not connected', r.connected ? 'ok' : 'err') } catch (e) { toast(errMsg(e), 'err') } }
-  const setMode = async (m: string) => { setF({ ...f, health_mode: m as SettingsT['health_mode'] }); await save({ health_mode: m as SettingsT['health_mode'] }); load() }
+  const name = app === 'health' ? 'Pocket Health' : 'Pocket Money'
+  const set = (key: string, v: string) => setF({ ...f, [key]: v } as typeof f)
+  const test = async () => { try { const r = await api.post<NonNullable<typeof status>>(`${V1}/${app}/status`); setStatus(r); toast(r.connected ? r.message || 'Connected' : r.detail || 'Not connected', r.connected ? 'ok' : 'err') } catch (e) { toast(errMsg(e), 'err') } }
+  const setMode = async (m: string) => { set(k.mode, m); await save({ [k.mode]: m } as Partial<SettingsT>); load() }
   return (
-    <div className="stack loose">
-      <div className="callout info"><Icon name="info" size={15} /><div>These connections are yours. Through <b>Pocket Core</b> Movement acts as you in your own Pocket Health with nothing to paste (switch it off for yourself in Pocket Core → Settings → Apps acting for me); <b>Direct</b> uses an address and an API token you enter.{!coreOn && <NeedsCore />}</div></div>
-      <Section title="Pocket Health — your workouts" icon="run" actions={<span className={`badge ${mode === 'off' ? '' : status?.connected ? 'ok' : 'warn'}`}>{mode === 'off' ? 'off' : status?.connected ? (status.via === 'core' ? 'Pocket Core' : 'direct') : 'not connected'}</span>}
-        sub="Every workout Pocket Health knows (from your watch and phone) appears under Workouts, drawn from the positions recorded here while it ran.">
-        <div className="conn-block">
-          <div className="conn-mode">
-            <Segmented size="sm" value={mode} onChange={setMode} options={[
-              { value: 'core', label: 'Pocket Core', title: coreOn ? 'Through Pocket Core: per person, nothing to paste' : 'Needs Pocket Core: there is none on this server', disabled: !coreOn },
-              ...(showDirect ? [{ value: 'direct', label: 'Direct', title: 'Your own address and API token' }] : []),
-              { value: 'off', label: 'Off' },
-            ]} />
-            {!showDirect && <button type="button" className="link-btn small" onClick={() => setAdvanced(true)}>Advanced: connect directly with an address and token</button>}
-          </div>
-          <p className={`small ${mode === 'off' ? 'muted' : status?.connected ? 'ok' : 'bad'}`}>{mode === 'off' ? 'Off: Movement does not talk to Pocket Health.' : status?.connected ? (status.via === 'core' ? 'Connected through Pocket Core, as you.' : 'Direct connection with your own address and token.') : `Not connected: ${status?.detail || '…'}`}</p>
-          {mode === 'direct' && <div className="two-col tight">
-            <Field label="Address" help="Inside Docker use http://host.docker.internal:PORT or the service name."><input value={f.health_url} onChange={e => setF({ ...f, health_url: e.target.value })} placeholder="http://host.docker.internal:8199" /></Field>
-            <Field label="API token" help="Pocket Health → Settings → API & shortcuts"><input value={f.health_token} onChange={e => setF({ ...f, health_token: e.target.value })} autoComplete="off" /></Field>
-          </div>}
-          <div className="row wrap">
-            {mode === 'direct' && <button type="button" className="btn primary sm" disabled={busy} onClick={async () => { await save(); load() }}>Save</button>}
-            {mode !== 'off' && <button type="button" className="btn sm" onClick={test}>Test connection</button>}
-            {mode === 'direct' && !!f.health_token && <button type="button" className="btn sm ghost danger-text" onClick={async () => { await save({ health_url: '', health_token: '' }); load() }}>Disconnect</button>}
-          </div>
+    <Section title={title} icon={icon} actions={<span className={`badge ${mode === 'off' ? '' : status?.connected ? 'ok' : 'warn'}`}>{mode === 'off' ? 'off' : status?.connected ? (status.via === 'core' ? 'Pocket Core' : 'direct') : 'not connected'}</span>} sub={sub}>
+      <div className="conn-block">
+        <div className="conn-mode">
+          <Segmented size="sm" value={mode} onChange={setMode} options={[
+            { value: 'core', label: 'Pocket Core', title: coreOn ? 'Through Pocket Core: per person, nothing to paste' : 'Needs Pocket Core: there is none on this server', disabled: !coreOn },
+            ...(showDirect ? [{ value: 'direct', label: 'Direct', title: 'Your own address and API token' }] : []),
+            { value: 'off', label: 'Off' },
+          ]} />
+          {!showDirect && <button type="button" className="link-btn small" onClick={() => setAdvanced(true)}>Advanced: connect directly with an address and token</button>}
         </div>
-      </Section>
-    </div>
+        <p className={`small ${mode === 'off' ? 'muted' : status?.connected ? 'ok' : 'bad'}`}>{mode === 'off' ? `Off: Movement does not talk to ${name}.` : status?.connected ? (status.via === 'core' ? 'Connected through Pocket Core, as you.' : 'Direct connection with your own address and token.') : `Not connected: ${status?.detail || '…'}`}</p>
+        {mode === 'direct' && <div className="two-col tight">
+          <Field label="Address" help="Inside Docker use http://host.docker.internal:PORT or the service name."><input value={fv[k.url]} onChange={e => set(k.url, e.target.value)} placeholder={placeholder} /></Field>
+          <Field label="API token" help={tokenHelp}><input value={fv[k.token]} onChange={e => set(k.token, e.target.value)} autoComplete="off" /></Field>
+        </div>}
+        <div className="row wrap">
+          {mode === 'direct' && <button type="button" className="btn primary sm" disabled={busy} onClick={async () => { await save(); load() }}>Save</button>}
+          {mode !== 'off' && <button type="button" className="btn sm" onClick={test}>Test connection</button>}
+          {mode === 'direct' && !!fv[k.token] && <button type="button" className="btn sm ghost danger-text" onClick={async () => { await save({ [k.url]: '', [k.token]: '' } as Partial<SettingsT>); load() }}>Disconnect</button>}
+        </div>
+      </div>
+    </Section>
   )
 }
 

@@ -63,6 +63,7 @@ func isNotConnected(err error) bool {
 
 type healthClient struct {
 	base, token, public, via string
+	name                     string // the app, for errors ("" = Pocket Health)
 	http                     *http.Client
 }
 
@@ -136,10 +137,11 @@ func (c *healthClient) get(ctx context.Context, path string, q url.Values, v any
 			Error string `json:"error"`
 		}
 		_ = json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&e)
+		name := firstNonEmpty(c.name, healthApp.name)
 		if e.Error != "" {
-			return fmt.Errorf("Pocket Health answered %d: %s", res.StatusCode, e.Error)
+			return fmt.Errorf("%s answered %d: %s", name, res.StatusCode, e.Error)
 		}
-		return fmt.Errorf("Pocket Health answered %d", res.StatusCode)
+		return fmt.Errorf("%s answered %d", name, res.StatusCode)
 	}
 	return json.NewDecoder(io.LimitReader(res.Body, 32<<20)).Decode(v)
 }

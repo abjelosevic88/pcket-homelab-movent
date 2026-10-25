@@ -5,7 +5,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { addDaysISO, agoTs, fmtClock, fmtDist, fmtDur, fmtLongDate, fmtShortDate, flag, modeOf, todayIn } from '../lib/geo'
-import type { DayView, LivePerson, MapData, NowView, Place } from '../lib/types'
+import type { DayView, LivePerson, MapData, NowView, Place, Visit } from '../lib/types'
+import { purchasesByVisit, usePurchases } from '../lib/purchases'
 import { DEFAULT_LAYERS, type Layers, MoveMap, type PointRow, TILES, tileKey, tilePreview } from '../components/MoveMap'
 import { EntryList } from '../components/timeline'
 import { Icon } from '../components/icons'
@@ -47,6 +48,8 @@ export default function MapPage() {
   const [detail, setDetail] = useState<{ lat: number; lng: number; speed: number | null }[] | undefined>()
   const [tick, setTick] = useState(0)
   const reload = () => setTick(t => t + 1)
+  const purchases = usePurchases(from, to, tick)
+  const paid = useMemo(() => purchasesByVisit(day?.entries.filter((e): e is Visit & { type: 'visit' } => e.type === 'visit') || [], purchases?.items || []), [day, purchases])
 
   // the range
   useEffect(() => {
@@ -165,7 +168,7 @@ export default function MapPage() {
 
   return (
     <div ref={pageRef} className="mp">
-      <MoveMap className="mp-map" tracks={data?.tracks} raw={data?.raw} visits={visits} places={places} points={points} heat={heat} fogCells={fog} fogCell={120}
+      <MoveMap className="mp-map" tracks={data?.tracks} raw={data?.raw} visits={visits} places={places} purchases={purchases?.items} points={points} heat={heat} fogCells={fog} fogCell={120}
         people={people} me={me} layers={layers} colorBy={colorBy} selected={selected} detail={detail} onSelect={setSelected}
         fitKey={`${from}|${to}|${data ? 'd' : ''}`} bounds={data?.bounds || null} />
 
@@ -189,7 +192,7 @@ export default function MapPage() {
       {layerPop && (
         <Popover anchor={layerPop} onClose={() => setLayerPop(null)} prefer="below" width={290} label="Map layers">
           <div className="mp-layer-list">
-            {([['routes', 'Journeys', 'route'], ['visits', 'Visits', 'pin'], ['places', 'Saved places', 'home'], ['points', 'Every point', 'dot'], ['heat', 'Heat map', 'fire'], ['fog', 'Fog of war (all time)', 'cloud'], ['people', 'Family', 'users']] as [keyof Layers, string, string][]).map(([k, l, ic]) => (
+            {([['routes', 'Journeys', 'route'], ['visits', 'Visits', 'pin'], ['purchases', 'Where you paid', 'receipt'], ['places', 'Saved places', 'home'], ['points', 'Every point', 'dot'], ['heat', 'Heat map', 'fire'], ['fog', 'Fog of war (all time)', 'cloud'], ['people', 'Family', 'users']] as [keyof Layers, string, string][]).map(([k, l, ic]) => (
               <label key={k} className="mp-layer"><Icon name={ic} size={16} /><span className="grow">{l}</span><Switch checked={layers[k]} onChange={v => setLayer(k, v)} size="sm" /></label>
             ))}
             <div className="mp-layer-h">Map style</div>
@@ -246,7 +249,7 @@ export default function MapPage() {
           )}
           {mobile && !sheetOpen ? null : single && day ? (
             <div className="mp-entries">
-              <EntryList entries={day.entries.filter(e => e.type === 'journey' || e.status !== 'declined')} selected={selected} onSelect={setSelected} onChanged={reload} compact dayStart={day.from} />
+              <EntryList entries={day.entries.filter(e => e.type === 'journey' || e.status !== 'declined')} selected={selected} onSelect={setSelected} onChanged={reload} compact dayStart={day.from} paid={paid} />
               {!day.entries.length && !loading && <p className="muted small">No journeys or visits {from === today ? 'yet today' : 'this day'}.</p>}
               <div className="row gap mt"><Link className="btn sm" to={`/timeline/${from}`}><Icon name="activity" size={14} />Open the day</Link></div>
             </div>

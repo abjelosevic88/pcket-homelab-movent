@@ -182,3 +182,9 @@ html[data-theme="dark"] .mm .leaflet-tooltip { background: var(--raised); color:
 .wk-row .block { display: block; }
 .wk-ico { width: 32px; height: 32px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
 .pad { padding: 12px 16px; }
+/* where you paid (Pocket Money) */
+.mm-paid { width: 24px; height: 24px; border-radius: 8px 8px 8px 2px; background: #fff; border: 2px solid #7c3aed; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); display: grid; place-items: center; font-size: 13px; line-height: 1; transform: rotate(-45deg); }
+.mm-paid > * { transform: rotate(45deg); }
+.tl-paid { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 4px 8px; border-radius: 8px; background: var(--surface-2); color: inherit; font-size: 12.5px; text-decoration: none; max-width: 100%; }
+.tl-paid:hover { background: var(--surface-3); text-decoration: none; }
+.tl-paid b { font-variant-numeric: tabular-nums; white-space: nowrap; }

@@ -20,6 +20,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	u := userFrom(ctx)
 	st, loc := s.userLoc(ctx, u.ID)
 	st.HealthToken = maskToken(st.HealthToken)
+	st.MoneyToken = maskToken(st.MoneyToken)
 	writeJSON(w, http.StatusOK, map[string]any{"settings": st, "effective_timezone": loc.String(), "server_timezone": time.Local.String(), "is_admin": u.Role == "admin"})
 }
 
@@ -70,6 +71,17 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		st.HealthMode = ""
 	}
+	if strings.Contains(st.MoneyToken, "••") {
+		st.MoneyToken = before.MoneyToken
+	}
+	st.MoneyToken = strings.TrimSpace(st.MoneyToken)
+	st.MoneyURL = strings.TrimRight(strings.TrimSpace(st.MoneyURL), "/")
+	st.MoneyPublicURL = strings.TrimRight(strings.TrimSpace(st.MoneyPublicURL), "/")
+	switch st.MoneyMode {
+	case modeCore, modeDirect, modeOff, "":
+	default:
+		st.MoneyMode = ""
+	}
 	if err := s.store.SaveUserSettings(ctx, u.ID, st); err != nil {
 		s.fail(w, err, "save settings")
 		return
@@ -87,6 +99,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	st, _ = s.store.GetSettings(ctx, u.ID)
 	st.HealthToken = maskToken(st.HealthToken)
+	st.MoneyToken = maskToken(st.MoneyToken)
 	writeJSON(w, http.StatusOK, map[string]any{"settings": st, "rebuilding": rebuild})
 }
 
