@@ -37,6 +37,11 @@ type Settings struct {
 	HealthURL       string `json:"health_url"`
 	HealthToken     string `json:"health_token"`
 	HealthPublicURL string `json:"health_public_url"`
+	// Pocket Money (where you paid, from scanned receipts): same modes as Pocket Health.
+	MoneyMode      string `json:"money_mode"`
+	MoneyURL       string `json:"money_url"`
+	MoneyToken     string `json:"money_token"`
+	MoneyPublicURL string `json:"money_public_url"`
 }
 
 // ModeSpeeds (km/h) sort a journey into a transport mode. "Top" is the speed
@@ -155,6 +160,22 @@ func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error)
 			integer(v, &st.NotifyStaleHours)
 		case "notify_countries":
 			st.NotifyCountries = v != "0"
+		case "health_mode":
+			st.HealthMode = v
+		case "health_url":
+			st.HealthURL = v
+		case "health_token":
+			st.HealthToken = v
+		case "health_public_url":
+			st.HealthPublicURL = v
+		case "money_mode":
+			st.MoneyMode = v
+		case "money_url":
+			st.MoneyURL = v
+		case "money_token":
+			st.MoneyToken = v
+		case "money_public_url":
+			st.MoneyPublicURL = v
 		}
 	}
 	return st, nil
@@ -178,6 +199,15 @@ func personalKV(st Settings) map[string]string {
 		"mode_speeds":        string(speeds),
 		"notify_stale_hours": strconv.Itoa(st.NotifyStaleHours),
 		"notify_countries":   b[st.NotifyCountries],
+		// connected apps (the Health ones were shown and edited but never stored)
+		"health_mode":       st.HealthMode,
+		"health_url":        st.HealthURL,
+		"health_token":      st.HealthToken,
+		"health_public_url": st.HealthPublicURL,
+		"money_mode":        st.MoneyMode,
+		"money_url":         st.MoneyURL,
+		"money_token":       st.MoneyToken,
+		"money_public_url":  st.MoneyPublicURL,
 	}
 }
 

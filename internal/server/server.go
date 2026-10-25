@@ -277,6 +277,9 @@ func (s *Server) Router() http.Handler {
 
 			r.Get("/workouts", s.handleListWorkouts)
 			r.Get("/workouts/{id}/points", s.handleWorkoutPoints)
+			r.Get("/money/status", s.handleMoneyStatus)
+			r.Post("/money/status", s.handleMoneyStatus)
+			r.Get("/purchases", s.handlePurchases)
 			r.Get("/health/status", s.handleHealthStatus)
 			r.Post("/health/status", s.handleHealthStatus)
 

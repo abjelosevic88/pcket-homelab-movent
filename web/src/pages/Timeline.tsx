@@ -1,6 +1,6 @@
 // One day, Google-Timeline style: where you stayed and how you moved, in
 // order, to confirm, name and correct — with the day's map beside it.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
@@ -8,6 +8,7 @@ import { addDaysISO, currentTZ, fmtClock, fmtDist, fmtDur, fmtLongDate, flag, mo
 import type { DayView, Visit } from '../lib/types'
 import { MoveMap } from '../components/MoveMap'
 import { EntryList } from '../components/timeline'
+import { purchasesByVisit, usePurchases } from '../lib/purchases'
 import { Icon } from '../components/icons'
 import { Field, Loading, Modal, Spinner, errMsg, useIsMobile, useToast } from '../components/ui'
 
@@ -26,6 +27,8 @@ export default function Timeline() {
   const [pickOnMap, setPickOnMap] = useState(false)
   const [tick, setTick] = useState(0)
   const reload = useCallback(() => setTick(t => t + 1), [])
+  const purchases = usePurchases(date || '', date || '', tick)
+  const paid = useMemo(() => purchasesByVisit(day?.entries.filter((e): e is Visit & { type: 'visit' } => e.type === 'visit') || [], purchases?.items || []), [day, purchases])
 
   useEffect(() => {
     if (!date) return
@@ -123,7 +126,7 @@ export default function Timeline() {
               </div>
             )}
             {s && s.first_ts > 0 && <p className="muted small tlp-span">Recorded {fmtClock(s.first_ts)}–{fmtClock(s.last_ts)} · {s.points.toLocaleString()} points</p>}
-            <EntryList entries={entries} selected={selected} onSelect={setSelected} onChanged={reload} dayStart={day?.from} />
+            <EntryList entries={entries} selected={selected} onSelect={setSelected} onChanged={reload} dayStart={day?.from} paid={paid} />
             {!entries.length && !loading && (
               <div className="tlp-empty">
                 <Icon name="cloud" size={28} />
@@ -140,7 +143,7 @@ export default function Timeline() {
         )}
       </section>
       <section className="tlp-map">
-        <MoveMap tracks={tracks} visits={visits} selected={selected} detail={detail} onSelect={setSelected} colorBy="mode"
+        <MoveMap tracks={tracks} visits={visits} purchases={purchases?.items} selected={selected} detail={detail} onSelect={setSelected} colorBy="mode"
           onMapClick={pickOnMap ? (lat, lng) => { setPickOnMap(false); setAdding({ lat, lng }) } : undefined}
           fitKey={`${date}|${day ? entries.length : ''}`} className={pickOnMap ? 'picking' : ''} />
       </section>

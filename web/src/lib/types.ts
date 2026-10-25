@@ -8,6 +8,7 @@ export interface Settings {
   modes_off: string[]; mode_speeds: ModeSpeeds
   notify_stale_hours: number; notify_countries: boolean
   health_mode: 'core' | 'direct' | 'off' | ''; health_url: string; health_token: string; health_public_url: string
+  money_mode: 'core' | 'direct' | 'off' | ''; money_url: string; money_token: string; money_public_url: string
 }
 
 /** km/h. "Top" is what a journey stays under 85% of the time, "typical" its median. */

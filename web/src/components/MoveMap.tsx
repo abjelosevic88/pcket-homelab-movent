@@ -7,6 +7,7 @@ import 'leaflet/dist/leaflet.css'
 import { useApp } from '../lib/app-context'
 import { decodePolyline, fmtClock, fmtDist, fmtDur, modeOf, placeEmoji, speedColor } from '../lib/geo'
 import type { Journey, LivePerson, Place, Visit } from '../lib/types'
+import { type Purchase, fmtMoney, purchasesByVisit, shopOf } from '../lib/purchases'
 
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 const ESRI_ATTR = 'Tiles &copy; Esri'
@@ -31,14 +32,15 @@ export const TILE_ALIASES: Record<string, string> = { 'carto-light': 'esri-gray'
 export const tileKey = (k?: string) => (k && TILES[k] ? k : (k && TILE_ALIASES[k]) || 'osm')
 
 export type PointRow = [number, number, number, number, number | null, number | null, number | null, number]
-export interface Layers { routes: boolean; points: boolean; heat: boolean; fog: boolean; visits: boolean; places: boolean; people: boolean }
-export const DEFAULT_LAYERS: Layers = { routes: true, points: false, heat: false, fog: false, visits: true, places: true, people: true }
+export interface Layers { routes: boolean; points: boolean; heat: boolean; fog: boolean; visits: boolean; places: boolean; people: boolean; purchases: boolean }
+export const DEFAULT_LAYERS: Layers = { routes: true, points: false, heat: false, fog: false, visits: true, places: true, people: true, purchases: true }
 
 export interface MoveMapProps {
   tracks?: Journey[]
   raw?: string
   visits?: Visit[]
   places?: Place[]
+  purchases?: Purchase[]
   points?: PointRow[]
   heat?: [number, number, number][]
   fogCells?: [number, number, number][]
@@ -78,7 +80,7 @@ export function MoveMap(props: MoveMapProps) {
     L.control.zoom({ position: 'bottomright' }).addTo(m)
     m.setView([44, 17], 5)
     canvas.current = L.canvas({ padding: 0.3 })
-    for (const g of ['fogpane', 'heat', 'places', 'raw', 'routes', 'detail', 'points', 'visits', 'people', 'me', 'hover']) groups.current[g] = L.layerGroup().addTo(m)
+    for (const g of ['fogpane', 'heat', 'places', 'raw', 'routes', 'detail', 'points', 'visits', 'purchases', 'people', 'me', 'hover']) groups.current[g] = L.layerGroup().addTo(m)
     // Canvas overlays for the heat map and the fog, redrawn as the map moves.
     // They live in panes inside the map, above the tiles (200) and under the
     // lines and markers (400): appended to the container they sat beneath
@@ -172,6 +174,7 @@ export function MoveMap(props: MoveMapProps) {
     if (!g) return
     g.clearLayers()
     if (!layers.visits) return
+    const paid = purchasesByVisit(props.visits || [], props.purchases || [])
     for (const v of props.visits || []) {
       if (v.status === 'declined') continue
       const isSel = props.selected?.type === 'visit' && props.selected.id === v.id
@@ -180,10 +183,26 @@ export function MoveMap(props: MoveMapProps) {
       const emoji = v.place ? placeEmoji(v.place.category) : '📍'
       const icon = L.divIcon({ className: '', html: `<div class="mm-visit ${v.status} ${isSel ? 'sel' : ''}" style="--r:${r}px">${v.place?.category ? emoji : ''}</div>`, iconSize: [r * 2, r * 2], iconAnchor: [r, r] })
       const mk = L.marker([v.lat, v.lng], { icon, riseOnHover: true, zIndexOffset: isSel ? 1000 : 0 }).addTo(g)
-      mk.bindTooltip(`<b>${esc(v.name || 'Unnamed place')}</b><br>${fmtClock(v.start_ts)}–${fmtClock(v.end_ts)} · ${fmtDur(v.end_ts - v.start_ts)}${v.status === 'suggested' ? '<br><span class="muted">suggested — confirm it in the timeline</span>' : ''}`, { direction: 'top', offset: [0, -r] })
+      const bought = paid.get(v.id) || []
+      const paidLine = bought.map(p => `<br>${p.category_icon || '🧾'} ${esc(shopOf(p))} · <b>${fmtMoney(p.amount, p.currency)}</b> · ${p.time}`).join('')
+      mk.bindTooltip(`<b>${esc(v.name || (bought.length ? shopOf(bought[0]) : 'Unnamed place'))}</b><br>${fmtClock(v.start_ts)}–${fmtClock(v.end_ts)} · ${fmtDur(v.end_ts - v.start_ts)}${paidLine}${v.status === 'suggested' ? '<br><span class="muted">suggested — confirm it in the timeline</span>' : ''}`, { direction: 'top', offset: [0, -r] })
       mk.on('click', e => { L.DomEvent.stopPropagation(e); propsRef.current.onSelect?.({ type: 'visit', id: v.id }) })
     }
-  }, [props.visits, props.selected, layers.visits])
+  }, [props.visits, props.selected, props.purchases, layers.visits])
+
+  // ---- where you paid (Pocket Money) ----
+  useEffect(() => {
+    const g = groups.current.purchases
+    if (!g) return
+    g.clearLayers()
+    if (!layers.purchases) return
+    for (const p of props.purchases || []) {
+      const icon = L.divIcon({ className: '', html: `<div class="mm-paid">${p.category_icon || '🧾'}</div>`, iconSize: [24, 24], iconAnchor: [12, 24] })
+      const mk = L.marker([p.lat, p.lng], { icon, riseOnHover: true, zIndexOffset: 500 }).addTo(g)
+      mk.bindTooltip(`<b>${esc(shopOf(p))}</b> · ${fmtMoney(p.amount, p.currency)}<br><span class="muted">${p.date}${p.time ? ' ' + p.time : ''}${p.category ? ' · ' + esc(p.category) : ''}${p.items ? ` · ${p.items} items` : ''}</span>`, { direction: 'top', offset: [0, -24] })
+      mk.on('click', e => { L.DomEvent.stopPropagation(e); window.open(p.url, '_blank', 'noopener') })
+    }
+  }, [props.purchases, layers.purchases])
 
   useEffect(() => {
     const g = groups.current.places
