@@ -7,7 +7,7 @@ import 'leaflet/dist/leaflet.css'
 import { useApp } from '../lib/app-context'
 import { decodePolyline, fmtClock, fmtDist, fmtDur, modeOf, placeEmoji, speedColor } from '../lib/geo'
 import type { Journey, LivePerson, Place, Visit } from '../lib/types'
-import { type Purchase, fmtMoney, purchasesByVisit, shopOf } from '../lib/purchases'
+import { type Purchase, fmtMoney, purchasesByVisit, shopNamesVisit, shopOf } from '../lib/purchases'
 
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 const ESRI_ATTR = 'Tiles &copy; Esri'
@@ -185,7 +185,7 @@ export function MoveMap(props: MoveMapProps) {
       const mk = L.marker([v.lat, v.lng], { icon, riseOnHover: true, zIndexOffset: isSel ? 1000 : 0 }).addTo(g)
       const bought = paid.get(v.id) || []
       const paidLine = bought.map(p => `<br>${p.category_icon || '🧾'} ${esc(shopOf(p))} · <b>${fmtMoney(p.amount, p.currency)}</b> · ${p.time}`).join('')
-      mk.bindTooltip(`<b>${esc(v.name || (bought.length ? shopOf(bought[0]) : 'Unnamed place'))}</b><br>${fmtClock(v.start_ts)}–${fmtClock(v.end_ts)} · ${fmtDur(v.end_ts - v.start_ts)}${paidLine}${v.status === 'suggested' ? '<br><span class="muted">suggested — confirm it in the timeline</span>' : ''}`, { direction: 'top', offset: [0, -r] })
+      mk.bindTooltip(`<b>${esc(bought.length && shopNamesVisit(v) ? shopOf(bought[0]) : v.name || 'Unnamed place')}</b><br>${fmtClock(v.start_ts)}–${fmtClock(v.end_ts)} · ${fmtDur(v.end_ts - v.start_ts)}${paidLine}${v.status === 'suggested' ? '<br><span class="muted">suggested — confirm it in the timeline</span>' : ''}`, { direction: 'top', offset: [0, -r] })
       mk.on('click', e => { L.DomEvent.stopPropagation(e); propsRef.current.onSelect?.({ type: 'visit', id: v.id }) })
     }
   }, [props.visits, props.selected, props.purchases, layers.visits])

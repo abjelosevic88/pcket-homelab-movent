@@ -31,20 +31,30 @@ export function fmtMoney(minor: number, currency: string): string {
   return currency === 'BAM' ? `${v} KM` : currency === 'EUR' ? `€${v}` : `${v} ${currency}`
 }
 
-/** A purchase belongs to the visit it was paid during: within ten minutes of
- *  its stay, and close to it (twice its radius, at least 250 m). */
+/** A purchase belongs to the visit it was paid during. Close by (twice the
+ *  visit's radius, at least 250 m) and at most five minutes outside the
+ *  stay; or — since a shop's pin comes from its address and can be off by
+ *  a street or two — up to 1.5 km away when it was paid well inside the stay. */
 export function purchasesByVisit(visits: Visit[], purchases: Purchase[]): Map<number, Purchase[]> {
   const out = new Map<number, Purchase[]>()
   for (const p of purchases) {
     if (!p.time_known) continue
     let best: Visit | null = null
-    let bestD = Infinity
+    let bestScore = Infinity
     for (const v of visits) {
-      if (v.status === 'declined' || p.ts < v.start_ts - 600 || p.ts > v.end_ts + 600) continue
+      if (v.status === 'declined' || p.ts < v.start_ts - 300 || p.ts > v.end_ts + 300) continue
       const d = haversine([v.lat, v.lng], [p.lat, p.lng])
-      if (d <= Math.max(v.radius * 2, 250) && d < bestD) { best = v; bestD = d }
+      const near = d <= Math.max(v.radius * 2, 250)
+      const inside = p.ts >= v.start_ts && p.ts <= v.end_ts
+      if (!near && !(inside && d <= 1500)) continue
+      const score = near ? d : 10000 + d // a close visit beats a merely simultaneous one
+      if (score < bestScore) { best = v; bestScore = score }
     }
     if (best) out.set(best.id, [...(out.get(best.id) || []), p])
   }
   return out
 }
+
+/** Whether a visit's own name should give way to the shop's: not when the
+ *  person named it or it is one of their saved places. */
+export const shopNamesVisit = (v: Visit) => !v.own_name && v.place?.kind !== 'saved'
