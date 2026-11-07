@@ -2,8 +2,8 @@
 <h1 align="center">Pocket Movement</h1>
 <p align="center">Your location history, kept at home: where you went, how and how far, the places you stop and the countries you have been — from your phone's own tracker app or the Dawarich app, whose API it speaks.<br>One Go binary, one SQLite file, one volume.</p>
 <p align="center">
-  <a href="https://github.com/abjelosevic88/pcket-homelab-movent/actions"><img src="https://github.com/abjelosevic88/pcket-homelab-movent/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://github.com/abjelosevic88/pcket-homelab-movent/pkgs/container/pcket-homelab-movent"><img src="https://img.shields.io/badge/ghcr.io-amd64%20%7C%20arm64%20%7C%20armv7-blue" alt="image"></a>
+  <a href="https://github.com/abjelosevic88/pocket-homelab-movement/actions"><img src="https://github.com/abjelosevic88/pocket-homelab-movement/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/abjelosevic88/pocket-homelab-movement/pkgs/container/pocket-homelab-movement"><img src="https://img.shields.io/badge/ghcr.io-amd64%20%7C%20arm64%20%7C%20armv7-blue" alt="image"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"></a>
 </p>
 
