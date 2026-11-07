@@ -1,6 +1,6 @@
 // Insights: the year (or any range) in numbers and charts, a year in review,
 // the calendar of tracked days, and the countries and cities you have been to.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -241,7 +241,7 @@ function YearInReview({ d, label }: { d: InsightsT; label: string }) {
         <div className="review-big tnum">{fmtDist(t.distance)}</div>
         <div className="review-scale">{scale}</div>
         <div className="review-route" aria-hidden="true">
-          <svg viewBox="0 0 300 40" preserveAspectRatio="none"><path d="M4 30 C40 6 70 36 110 18 S180 4 210 22 S270 34 296 10" /><circle cx="4" cy="30" r="4" /><circle cx="296" cy="10" r="5" /></svg>
+          <RouteLine />
         </div>
       </section>
 
@@ -296,6 +296,35 @@ function YearInReview({ d, label }: { d: InsightsT; label: string }) {
         <Link to="/insights" className="btn ghost">All the numbers</Link>
       </div>
     </div>
+  )
+}
+
+/** The element's real width, so a chart draws 1:1 and its text, dots and corners keep their shape. */
+function useWidth(fallback: number) {
+  const [w, setW] = useState(fallback)
+  const ro = useRef<ResizeObserver | null>(null)
+  const ref = useCallback((el: Element | null) => {
+    ro.current?.disconnect()
+    ro.current = null
+    if (!el) return
+    const measure = () => { const cw = Math.round(el.getBoundingClientRect().width); if (cw > 0) setW(cw) }
+    measure()
+    ro.current = new ResizeObserver(measure)
+    ro.current.observe(el)
+  }, [])
+  return [ref, w] as const
+}
+
+/** The dashed route drawn across the year card, at its real width so the end dots stay round. */
+function RouteLine() {
+  const [ref, W] = useWidth(300)
+  const k = W / 300
+  const X = (v: number) => (v * k).toFixed(1)
+  return (
+    <svg ref={ref} viewBox={`0 0 ${W} 40`} width={W} height={40}>
+      <path d={`M${X(4)} 30 C${X(40)} 6 ${X(70)} 36 ${X(110)} 18 S${X(180)} 4 ${X(210)} 22 S${X(270)} 34 ${X(296)} 10`} />
+      <circle cx={X(4)} cy="30" r="4" /><circle cx={X(296)} cy="10" r="5" />
+    </svg>
   )
 }
 

@@ -1,6 +1,6 @@
 // One place: where it is, how often and how long you were there, when you
 // usually come, every visit — and editing, hiding, merging.
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { flag, fmtClock, fmtDateTs, fmtDayShort, fmtDur, fmtHours, isoDateOf, placeEmoji, PLACE_CATEGORIES } from '../lib/geo'
@@ -140,22 +140,41 @@ function Tile({ label, value }: { label: string; value: string }) {
   return <div className="pd-tile"><span className="muted xsmall">{label}</span><b>{value}</b></div>
 }
 
+/** The element's real width, so a chart draws 1:1 and its text, dots and corners keep their shape. */
+function useWidth(fallback: number) {
+  const [w, setW] = useState(fallback)
+  const ro = useRef<ResizeObserver | null>(null)
+  const ref = useCallback((el: Element | null) => {
+    ro.current?.disconnect()
+    ro.current = null
+    if (!el) return
+    const measure = () => { const cw = Math.round(el.getBoundingClientRect().width); if (cw > 0) setW(cw) }
+    measure()
+    ro.current = new ResizeObserver(measure)
+    ro.current.observe(el)
+  }, [])
+  return [ref, w] as const
+}
+
 /** A small accessible bar chart: one bar per value, the peak labelled. */
 function Bars({ values, labels, tick, title, fmt }: { values: number[]; labels: string[]; tick: (i: number) => boolean; title: string; fmt: (v: number) => string }) {
   const max = Math.max(1, ...values)
   const peak = values.indexOf(Math.max(...values))
-  const W = 100 / values.length
+  const [ref, W] = useWidth(400)
+  const H = 92, base = 88
+  const slot = W / values.length
+  const pct = 100 / values.length
   return (
     <figure className="pd-bars">
       <figcaption className="muted small">{title}{values[peak] > 0 && <> · most at <b>{labels[peak]}</b></>}</figcaption>
-      <svg viewBox="0 0 100 44" preserveAspectRatio="none" role="img" aria-label={`${title}: ${values.map((v, i) => `${labels[i]} ${fmt(v)}`).join(', ')}`}>
+      <svg ref={ref} viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={`${title}: ${values.map((v, i) => `${labels[i]} ${fmt(v)}`).join(', ')}`}>
         {values.map((v, i) => {
-          const h = v ? Math.max(1.5, (v / max) * 40) : 0
-          return <rect key={i} x={i * W + W * 0.15} y={42 - h} width={W * 0.7} height={h} rx={0.8} className={i === peak ? 'peak' : ''}><title>{`${labels[i]}: ${fmt(v)}`}</title></rect>
+          const h = v ? Math.max(3, (v / max) * (base - 4)) : 0
+          return <rect key={i} x={i * slot + slot * 0.15} y={base - h} width={slot * 0.7} height={h} rx={Math.min(3, slot * 0.15)} className={i === peak ? 'peak' : ''}><title>{`${labels[i]}: ${fmt(v)}`}</title></rect>
         })}
-        <line x1="0" x2="100" y1="42.3" y2="42.3" className="axis" />
+        <line x1="0" x2={W} y1={base + 0.5} y2={base + 0.5} className="axis" />
       </svg>
-      <div className="pd-bar-labels">{labels.map((l, i) => <span key={i} style={{ width: `${W}%` }}>{tick(i) ? l : ''}</span>)}</div>
+      <div className="pd-bar-labels">{labels.map((l, i) => <span key={i} style={{ width: `${pct}%` }}>{tick(i) ? l : ''}</span>)}</div>
     </figure>
   )
 }
